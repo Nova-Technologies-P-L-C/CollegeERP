@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { useUser, UserButton } from "@clerk/nextjs";
+import { useUser, UserButton } from "@/context/SanctumAuthContext";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import { api } from "@/lib/axios";

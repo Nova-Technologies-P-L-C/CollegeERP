@@ -1,5 +1,5 @@
 import { Bell, Menu, Calendar, Megaphone, ArrowRight, RefreshCw, X } from "lucide-react";
-import { UserButton, useUser } from "@clerk/nextjs";
+import { UserButton, useUser } from "@/context/SanctumAuthContext";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { api } from "@/lib/axios";
@@ -8,6 +8,7 @@ import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DemoRoleSwitcher } from "@/components/dashboard/DemoRoleSwitcher";
 
 interface Announcement {
   id: string;
@@ -324,6 +325,7 @@ export function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
 
         {/* Right section */}
       <div className="ml-auto flex items-center gap-3">
+        <DemoRoleSwitcher />
         {/* Notifications */}
         {!isAdmin && (
           <button

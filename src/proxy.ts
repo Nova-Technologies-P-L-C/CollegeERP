@@ -1,97 +1,29 @@
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
-import { NextResponse } from 'next/server'
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
-const isAuthRoute = createRouteMatcher([
-  '/sign-in(.*)',
-  '/sign-up(.*)',
-  '/forgot-password(.*)',
-  '/sso-callback(.*)',
-  '/api/webhooks(.*)',
-  '/verify(.*)',      // Public QR verification page — no login required
-  '/api/verify(.*)', // Public QR verification API  — no login required
-])
+export function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+  const token = request.cookies.get("auth_token")?.value;
 
-const FACULTY_ALLOWED_ROUTES = [
-  '/dashboard',
-  '/dashboard/classes',
-  '/dashboard/mark-attendance',
-  '/dashboard/grades',
-  '/dashboard/question-bank',
-  '/dashboard/quizzes',
-  '/dashboard/feedback',
-  '/dashboard/settings',
-  '/dashboard/students',
-]
+  // Protect /dashboard routes
+  if (pathname.startsWith("/dashboard")) {
+    if (!token) {
+      const signInUrl = new URL("/sign-in", request.url);
+      signInUrl.searchParams.set("redirect", pathname);
+      return NextResponse.redirect(signInUrl);
+    }
+  }
 
-const STUDENT_ALLOWED_ROUTES = [
-  '/dashboard',
-  '/dashboard/my-courses',
-  '/dashboard/my-attendance',
-  '/dashboard/my-grades',
-  '/dashboard/my-dues',
-  '/dashboard/my-timetable',
-  '/dashboard/take-quiz',
-  '/dashboard/submit-feedback',
-  '/dashboard/settings',
-]
+  // If already authenticated and visiting sign-in or sign-up, redirect to dashboard
+  if ((pathname.startsWith("/sign-in") || pathname.startsWith("/sign-up")) && token) {
+    return NextResponse.redirect(new URL("/dashboard", request.url));
+  }
 
-type Role = 'admin' | 'faculty' | 'student'
-
-function matchesRoute(pathname: string, route: string): boolean {
-  return pathname === route || pathname.startsWith(`${route}/`)
+  return NextResponse.next();
 }
 
-function isAllowedPath(pathname: string, allowedRoutes: string[]): boolean {
-  return allowedRoutes.some((route) => matchesRoute(pathname, route))
-}
-
-function getRole(claims: unknown): Role {
-  const roleValue =
-    (claims as { metadata?: { role?: unknown } })?.metadata?.role ??
-    (claims as { public_metadata?: { role?: unknown } })?.public_metadata?.role
-
-  if (typeof roleValue !== 'string') {
-    return 'student'
-  }
-
-  const normalizedRole = roleValue.toLowerCase()
-
-  if (normalizedRole === 'admin' || normalizedRole === 'faculty' || normalizedRole === 'student') {
-    return normalizedRole
-  }
-
-  return 'student'
-}
-
-export default clerkMiddleware(async (auth, req) => {
-  if (isAuthRoute(req)) return;
-
-  const authObject = await auth()
-  const role = getRole(authObject.sessionClaims)
-  const pathname = req.nextUrl.pathname
-
-  // Redirect users trying to access unauthenticated core paths, unless it's the home page
-  if (!authObject.userId && pathname.startsWith('/dashboard')) {
-    return authObject.redirectToSignIn({ returnBackUrl: req.url })
-  }
-
-  if (!pathname.startsWith('/dashboard')) {
-    return
-  }
-
-  if (role === 'admin') {
-    return
-  }
-
-  if (role === 'faculty' && !isAllowedPath(pathname, FACULTY_ALLOWED_ROUTES)) {
-    return NextResponse.redirect(new URL('/dashboard', req.url))
-  }
-
-  if (role === 'student' && !isAllowedPath(pathname, STUDENT_ALLOWED_ROUTES)) {
-    return NextResponse.redirect(new URL('/dashboard', req.url))
-  }
-})
+export default middleware;
 
 export const config = {
-  matcher: ['/((?!.*\\..*|_next).*)', '/', '/(api|trpc)(.*)'],
-}
+  matcher: ["/dashboard/:path*", "/sign-in", "/sign-up"],
+};

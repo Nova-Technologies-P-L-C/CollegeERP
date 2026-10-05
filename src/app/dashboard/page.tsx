@@ -1,27 +1,39 @@
-import { auth } from "@clerk/nextjs/server";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import prisma from "@/lib/prisma";
 import AdminDashboardHome from "@/components/dashboard/AdminDashboardHome";
 import { StudentDashboardHome } from "@/components/dashboard/StudentDashboardHome";
 import { FacultyDashboardHome } from "@/components/dashboard/FacultyDashboardHome";
 
-export default async function DashboardPage() {
-  const { userId, sessionClaims } = await auth();
+export const dynamic = "force-dynamic";
 
-  if (!userId) {
+export default async function DashboardPage() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("auth_token")?.value;
+
+  if (!token) {
     redirect("/sign-in");
   }
 
-  const metadata = sessionClaims?.metadata as Record<string, unknown> | undefined;
-  let role = typeof metadata?.role === "string" ? metadata.role.toLowerCase() : undefined;
+  let role = "admin";
+  let user: any = null;
 
-  // Fallback to database user query if metadata role is not in JWT
-  if (!role) {
-    const dbUser = await prisma.user.findUnique({
-      where: { clerkId: userId },
-      select: { role: true },
+  try {
+    const res = await fetch("http://127.0.0.1:8000/api/me", {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+      cache: "no-store",
     });
-    role = dbUser?.role.toLowerCase();
+
+    if (!res.ok) {
+      redirect("/sign-in");
+    }
+
+    user = await res.json();
+    role = (user.role || "ADMIN").toLowerCase();
+  } catch (err) {
+    console.error("DashboardPage fetch user error:", err);
   }
 
   if (role === "faculty") {
@@ -29,16 +41,11 @@ export default async function DashboardPage() {
   }
 
   if (role === "student") {
-    const dbUserWithStudent = await prisma.user.findUnique({
-      where: { clerkId: userId },
-      select: { student: { select: { status: true } } },
-    });
-    if (dbUserWithStudent?.student?.status === "Graduated") {
+    if (user?.student?.status === "Graduated") {
       redirect("/graduated");
     }
     return <StudentDashboardHome />;
   }
 
-  // Default: admin
   return <AdminDashboardHome />;
 }

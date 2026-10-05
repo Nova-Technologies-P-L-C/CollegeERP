@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/axios";
-import { useUser } from "@clerk/nextjs";
+import { useUser } from "@/context/SanctumAuthContext";
 import { useRouter } from "next/navigation";
 import { Pencil, Trash2, Loader2, Eye, Calendar, Shield, RefreshCw, CheckCircle, BadgeCheck, Building2, BookOpen, GraduationCap, User, AlertOctagon, X, UserX } from "lucide-react";
 import { AuditBadgeInline } from "@/components/dashboard/AuditBadge";

@@ -30,6 +30,7 @@ export interface NavItem {
 
 const adminNav: NavItem[] = [
   { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { title: "Executive Oversight", href: "/dashboard/org-admin", icon: BarChart3 },
   { title: "Manage Students", href: "/dashboard/students", icon: Users },
   { title: "Dropped Students", href: "/dashboard/left-students", icon: UserX },
   { title: "Alumni Directory", href: "/dashboard/alumni", icon: GraduationCap },
@@ -37,7 +38,9 @@ const adminNav: NavItem[] = [
   { title: "Manage Faculty", href: "/dashboard/faculty", icon: GraduationCap },
   { title: "Faculty Attendance", href: "/dashboard/faculty-attendance", icon: UserCheck },
   { title: "Manage Courses", href: "/dashboard/courses", icon: BookOpen },
-  { title: "Admissions", href: "/dashboard/admissions", icon: UserPlus },
+  { title: "Registrar Desk", href: "/dashboard/registrar", icon: UserPlus },
+  { title: "Accountant Desk", href: "/dashboard/accountant", icon: CreditCard },
+  { title: "Admissions Pipeline", href: "/dashboard/admissions", icon: Users },
   { title: "Manage Dues", href: "/dashboard/dues", icon: CreditCard },
   { title: "Announcements", href: "/dashboard/announcements", icon: MessageSquare },
   { title: "Timetable", href: "/dashboard/timetable", icon: Calendar },

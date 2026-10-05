@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { ClerkProvider } from '@clerk/nextjs'
+import { ClerkProvider } from '@/context/SanctumAuthContext'
 import { Outfit } from 'next/font/google'
 import { ThemeProvider } from '@/lib/theme-provider'
 import './globals.css'

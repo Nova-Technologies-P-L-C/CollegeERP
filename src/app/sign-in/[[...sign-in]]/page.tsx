@@ -1,11 +1,10 @@
 "use client";
 
-import { useSignIn } from "@clerk/nextjs";
-import { isClerkAPIResponseError } from "@clerk/nextjs/errors";
+import { useSanctumAuth } from "@/context/SanctumAuthContext";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Sparkles, CheckCircle2, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
+import { ArrowLeft, Sparkles, CheckCircle2, Eye, EyeOff, Loader2, AlertCircle, Building2, Shield, UserPlus, Receipt, GraduationCap, BookOpen } from "lucide-react";
 import { ThemeToggle } from "@/components/dashboard/ThemeToggle";
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
@@ -14,8 +13,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+const DEMO_ACCOUNTS = [
+  { label: "Org Admin",   email: "demo.orgadmin@novatechnology.com",   icon: Building2,     color: "text-purple-600 dark:text-purple-400",  bg: "bg-purple-500/10" },
+  { label: "Branch Admin",email: "demo.admin@novatechnology.com",       icon: Shield,        color: "text-blue-600 dark:text-blue-400",      bg: "bg-blue-500/10"   },
+  { label: "Registrar",   email: "demo.registrar@novatechnology.com",   icon: UserPlus,      color: "text-amber-600 dark:text-amber-400",    bg: "bg-amber-500/10"  },
+  { label: "Accountant",  email: "demo.accountant@novatechnology.com",  icon: Receipt,       color: "text-emerald-600 dark:text-emerald-400",bg: "bg-emerald-500/10"},
+  { label: "Faculty",     email: "demo.faculty@novatechnology.com",     icon: GraduationCap, color: "text-indigo-600 dark:text-indigo-400",  bg: "bg-indigo-500/10" },
+  { label: "Student",     email: "demo.student1@novatechnology.com",    icon: BookOpen,      color: "text-teal-600 dark:text-teal-400",      bg: "bg-teal-500/10"   },
+];
+
 export default function SignInPage() {
-  const { isLoaded, signIn, setActive } = useSignIn();
+  const { isLoaded, login } = useSanctumAuth();
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
 
@@ -28,6 +36,24 @@ export default function SignInPage() {
   const [loading, setLoading] = useState(false);
   const [socialLoading, setSocialLoading] = useState<"google" | null>(null);
   const [error, setError] = useState("");
+  const [demoLoading, setDemoLoading] = useState<string | null>(null);
+
+  const handleDemoLogin = async (demoEmail: string) => {
+    setDemoLoading(demoEmail);
+    setError("");
+    try {
+      const res = await login(demoEmail, "password123");
+      if (res.success) {
+        router.push("/dashboard");
+      } else {
+        setError(res.error || "Demo login failed.");
+      }
+    } catch (err: any) {
+      setError(err?.message || "Demo login failed.");
+    } finally {
+      setDemoLoading(null);
+    }
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -35,56 +61,25 @@ export default function SignInPage() {
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isLoaded) return;
     setLoading(true);
     setError("");
 
     try {
-      const completeSignIn = await signIn.create({
-        identifier: email,
-        password,
-      });
-
-      if (completeSignIn.status === "complete") {
-        await setActive({ session: completeSignIn.createdSessionId });
+      const res = await login(email, password);
+      if (res.success) {
         router.push("/dashboard");
       } else {
-        setError("Action incomplete. Please check authentication requirements.");
+        setError(res.error || "Invalid email or password");
       }
-    } catch (err) {
-      if (isClerkAPIResponseError(err)) {
-        const firstErr = err.errors[0];
-        setError(firstErr?.longMessage || firstErr?.message || "Invalid email or password");
-      } else {
-        console.error("Sign-in error:", err);
-        setError("Invalid email or password");
-      }
+    } catch (err: any) {
+      setError(err?.message || "Invalid email or password");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSocialSignIn = async (strategy: "oauth_google" | "oauth_github") => {
-    if (!isLoaded) return;
-    setSocialLoading("google");
-    setError("");
-
-    try {
-      await signIn.authenticateWithRedirect({
-        strategy,
-        redirectUrl: "/sso-callback",
-        redirectUrlComplete: "/onboarding",
-      });
-    } catch (err) {
-      if (isClerkAPIResponseError(err)) {
-        const firstErr = err.errors[0];
-        setError(firstErr?.longMessage || firstErr?.message || "Social login redirect failed");
-      } else {
-        console.error("Social Sign-in error:", err);
-        setError("Social login redirect failed");
-      }
-      setSocialLoading(null);
-    }
+  const handleSocialSignIn = async () => {
+    setError("Social sign-in with Google is disabled in self-hosted Sanctum mode. Please sign in with your email & password or use the demo accounts below.");
   };
 
   if (!mounted) {
@@ -244,7 +239,7 @@ export default function SignInPage() {
                 variant="outline"
                 type="button"
                 disabled={loading || !!socialLoading}
-                onClick={() => handleSocialSignIn("oauth_google")}
+                onClick={() => handleSocialSignIn()}
                 className="w-full border-zinc-200 dark:border-white/10 bg-white dark:bg-white/5 hover:bg-zinc-50 dark:hover:bg-white/10 text-zinc-700 dark:text-zinc-200 rounded-lg h-10 flex items-center justify-center font-semibold text-sm transition-all"
               >
                 {socialLoading === "google" ? (
@@ -331,7 +326,6 @@ export default function SignInPage() {
                   {loading && <Loader2 className="h-4 w-4 animate-spin" />}
                   Log in
                 </Button>
-                <div id="clerk-captcha" className="mt-4 flex justify-center" />
               </form>
             </CardContent>
           </Card>
@@ -345,6 +339,44 @@ export default function SignInPage() {
               Sign up here
             </Link>
           </p>
+
+          {/* Demo Login Section */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="h-px bg-zinc-200 dark:bg-white/10 grow" />
+              <span className="text-[10px] uppercase font-bold tracking-widest text-zinc-400 dark:text-zinc-500 px-2 flex items-center gap-1">
+                <Sparkles className="h-3 w-3 text-brand-primary" />
+                Demo Access — One Click Login
+              </span>
+              <div className="h-px bg-zinc-200 dark:bg-white/10 grow" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              {DEMO_ACCOUNTS.map((account) => {
+                const Icon = account.icon;
+                const isLoading = demoLoading === account.email;
+                return (
+                  <button
+                    key={account.email}
+                    onClick={() => handleDemoLogin(account.email)}
+                    disabled={!!demoLoading || loading}
+                    className="flex items-center gap-2 p-2.5 rounded-xl border border-zinc-200 dark:border-white/10 bg-white/60 dark:bg-white/5 hover:border-brand-primary/50 hover:bg-brand-primary/5 transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    <div className={`h-7 w-7 rounded-lg ${account.bg} flex items-center justify-center shrink-0`}>
+                      {isLoading
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin text-brand-primary" />
+                        : <Icon className={`h-3.5 w-3.5 ${account.color}`} />
+                      }
+                    </div>
+                    <span className="text-xs font-bold text-zinc-700 dark:text-zinc-200 truncate">{account.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-center text-[10px] text-zinc-400 dark:text-zinc-500">
+              All demo accounts use password: <strong className="font-mono">password123</strong> (or <strong className="font-mono">NvTch##2026$$Erp!</strong>)
+            </p>
+          </div>
         </motion.div>
       </div>
     </div>

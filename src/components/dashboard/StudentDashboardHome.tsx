@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/axios";
-import { useUser } from "@clerk/nextjs";
+import { useUser } from "@/context/SanctumAuthContext";
 import {
   GraduationCap,
   Clock,

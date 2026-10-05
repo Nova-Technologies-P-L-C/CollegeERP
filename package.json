@@ -14,6 +14,7 @@
     "seed:courses": "bun prisma/seed-courses.ts",
     "seed:bs": "bun prisma/seed-bs.ts",
     "seed:hssc": "bun prisma/seed-hssc.ts",
+    "seed:demo": "bun prisma/seed-demo.ts",
     "seed:mockdata": "bun prisma/seed.ts"
   },
   "dependencies": {

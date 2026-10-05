@@ -1,11 +1,10 @@
 "use client";
 
-import { useSignUp } from "@clerk/nextjs";
-import { isClerkAPIResponseError } from "@clerk/nextjs/errors";
+import { useSanctumAuth } from "@/context/SanctumAuthContext";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Sparkles, UserCheck, Eye, EyeOff, Loader2, AlertCircle, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Sparkles, UserCheck, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
 import { ThemeToggle } from "@/components/dashboard/ThemeToggle";
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
@@ -15,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export default function SignUpPage() {
-  const { isLoaded, signUp, setActive } = useSignUp();
+  const { register } = useSanctumAuth();
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
 
@@ -26,10 +25,6 @@ export default function SignUpPage() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
-  // OTP Verification states
-  const [verifying, setVerifying] = useState(false);
-  const [otpCode, setOtpCode] = useState("");
-
   // Interaction states
   const [loading, setLoading] = useState(false);
   const [socialLoading, setSocialLoading] = useState<string | null>(null);
@@ -39,116 +34,32 @@ export default function SignUpPage() {
     setMounted(true);
   }, []);
 
-  const handleSocialSignUp = async (strategy: "oauth_google") => {
-    if (!isLoaded) return;
-    setSocialLoading("google");
-    setError("");
-
-    try {
-      await signUp.authenticateWithRedirect({
-        strategy,
-        redirectUrl: "/sso-callback",
-        redirectUrlComplete: "/onboarding",
-      });
-    } catch (err) {
-      if (isClerkAPIResponseError(err)) {
-        const firstErr = err.errors[0];
-        setError(firstErr?.longMessage || firstErr?.message || "Social sign-up redirect failed");
-      } else {
-        console.error("Social Sign-up error:", err);
-        setError("Social sign-up redirect failed");
-      }
-      setSocialLoading(null);
-    }
+  const handleSocialSignUp = async () => {
+    setError("Social sign-up with Google is disabled in self-hosted Sanctum mode. Please sign up with your email & password.");
   };
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isLoaded) return;
     setLoading(true);
     setError("");
 
     try {
-      // 1. Initiate sign-up creation
-      await signUp.create({
-        emailAddress: email,
+      const fullName = `${firstName} ${lastName}`.trim();
+      const res = await register({
+        name: fullName || "New User",
+        email: email.trim(),
         password,
-        firstName,
-        lastName,
       });
 
-      // 2. Request OTP email verification
-      await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
-      setVerifying(true);
-    } catch (err) {
-      if (isClerkAPIResponseError(err)) {
-        const firstErr = err.errors[0];
-        setError(firstErr?.longMessage || firstErr?.message || "Failed to create account. Please check inputs.");
-      } else {
-        console.error("Sign-up error:", err);
-        setError("Failed to create account. Please check inputs.");
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerify = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!isLoaded) return;
-    setLoading(true);
-    setError("");
-
-    try {
-      // 3. Attempt verification code confirmation
-      const completeSignUp = await signUp.attemptEmailAddressVerification({
-        code: otpCode,
-      });
-
-      if (completeSignUp.status === "complete") {
-        await setActive({ session: completeSignUp.createdSessionId });
+      if (res.success) {
         router.push("/onboarding");
       } else {
-        console.warn("Clerk sign-up verification not complete. Status:", completeSignUp.status, "Missing fields:", completeSignUp.missingFields, "Unverified fields:", completeSignUp.unverifiedFields);
-        
-        let msg = "Verification incomplete. Please retry.";
-        if (completeSignUp.status === "missing_requirements") {
-          const missing = completeSignUp.missingFields;
-          const unverified = completeSignUp.unverifiedFields;
-          if (missing && missing.length > 0) {
-            msg = `Sign-up incomplete. Missing required fields: ${missing.join(", ")}`;
-          } else if (unverified && unverified.length > 0) {
-            msg = `Sign-up incomplete. Unverified fields: ${unverified.join(", ")}`;
-          }
-        }
-        setError(msg);
+        setError(res.error || "Failed to create account. Please check inputs.");
       }
-    } catch (err) {
-      if (isClerkAPIResponseError(err)) {
-        const firstErr = err.errors[0];
-        setError(firstErr?.longMessage || firstErr?.message || "Invalid verification code.");
-      } else {
-        console.error("Verification error:", err);
-        setError("Invalid verification code.");
-      }
+    } catch (err: any) {
+      setError(err?.message || "Failed to create account. Please check inputs.");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleResendCode = async () => {
-    if (!isLoaded) return;
-    setError("");
-    try {
-      await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
-    } catch (err) {
-      if (isClerkAPIResponseError(err)) {
-        const firstErr = err.errors[0];
-        setError(firstErr?.longMessage || firstErr?.message || "Failed to resend code.");
-      } else {
-        console.error("Resend error:", err);
-        setError("Failed to resend code.");
-      }
     }
   };
 
@@ -285,12 +196,9 @@ export default function SignUpPage() {
 
           <div className="relative overflow-hidden w-full">
             
-            {/* -------------------- STEP 1: Registration Form -------------------- */}
-            {!verifying ? (
               <motion.div
-                initial={{ opacity: 0, x: -15 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 15 }}
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4 }}
                 className="space-y-6 w-full"
               >
@@ -318,7 +226,7 @@ export default function SignUpPage() {
                       variant="outline"
                       type="button"
                       disabled={loading || !!socialLoading}
-                      onClick={() => handleSocialSignUp("oauth_google")}
+                      onClick={() => handleSocialSignUp()}
                       className="w-full border-zinc-200 dark:border-white/10 bg-white dark:bg-white/5 hover:bg-zinc-50 dark:hover:bg-white/10 text-zinc-700 dark:text-zinc-200 rounded-lg h-10 flex items-center justify-center font-semibold text-sm transition-all cursor-pointer"
                     >
                       {socialLoading === "google" ? (
@@ -430,7 +338,6 @@ export default function SignUpPage() {
                         {loading && <Loader2 className="h-4 w-4 animate-spin" />}
                         Register
                       </Button>
-                      <div id="clerk-captcha" className="mt-4 flex justify-center" />
                     </form>
                   </CardContent>
                 </Card>
@@ -445,90 +352,6 @@ export default function SignUpPage() {
                   </Link>
                 </p>
               </motion.div>
-            ) : (
-              
-              // -------------------- STEP 2: OTP Verification --------------------
-              <motion.div
-                initial={{ opacity: 0, x: 15 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -15 }}
-                transition={{ duration: 0.4 }}
-                className="space-y-6 w-full"
-              >
-                <Card className="bg-white/40 dark:bg-[#131022]/40 backdrop-blur-xl border border-zinc-200/50 dark:border-white/10 shadow-2xl rounded-2xl p-6 transition-all duration-300">
-                  <CardHeader className="p-0 pb-6 flex flex-col items-center text-center">
-                    <div className="h-12 w-12 rounded-full bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/50 flex items-center justify-center text-emerald-600 dark:text-emerald-400 mb-3 animate-pulse">
-                      <ShieldCheck className="h-6 w-6" />
-                    </div>
-                    <CardTitle className="text-2xl font-black tracking-tight text-zinc-900 dark:text-white">
-                      Verify Your Email
-                    </CardTitle>
-                    <CardDescription className="text-zinc-500 dark:text-zinc-400 text-sm mt-1 max-w-[300px]">
-                      Enter the 6-digit OTP code sent to <strong className="text-zinc-800 dark:text-zinc-200 font-semibold">{email}</strong>
-                    </CardDescription>
-                  </CardHeader>
-
-                  <CardContent className="p-0 space-y-5">
-                    
-                    {/* Error block */}
-                    {error && (
-                      <div className="flex items-start gap-2.5 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50 p-3.5 text-xs text-red-600 dark:text-red-400">
-                        <AlertCircle className="h-4.5 w-4.5 shrink-0 mt-0.5" />
-                        <p className="leading-relaxed font-medium">{error}</p>
-                      </div>
-                    )}
-
-                    <form onSubmit={handleVerify} className="space-y-4">
-                      <div className="space-y-1.5">
-                        <Label htmlFor="otpCode" className="text-zinc-700 dark:text-zinc-300 font-semibold text-xs">
-                          Verification Code
-                        </Label>
-                        <Input
-                          id="otpCode"
-                          type="text"
-                          required
-                          disabled={loading}
-                          placeholder="e.g. 123456"
-                          maxLength={6}
-                          value={otpCode}
-                          onChange={(e) => setOtpCode(e.target.value)}
-                          className="bg-white dark:bg-white/5 border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:border-brand-primary dark:focus:border-brand-primary focus:ring-brand-primary/20 transition-all h-12 rounded-lg text-center text-lg font-bold tracking-[0.4em] pl-[0.4em]"
-                        />
-                      </div>
-
-                      <Button
-                        type="submit"
-                        disabled={loading}
-                        className="w-full bg-brand-primary hover:bg-brand-primary/90 text-white font-semibold text-sm transition-all duration-200 shadow-[0_0_20px_rgba(61,94,225,0.15)] hover:shadow-[0_0_25px_rgba(61,94,225,0.3)] h-10 rounded-lg cursor-pointer flex items-center justify-center gap-2 active:scale-[0.98]"
-                      >
-                        {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-                        Confirm Code & Sign Up
-                      </Button>
-                    </form>
-
-                    <div className="flex flex-col gap-2 pt-2 text-center text-xs">
-                      <button
-                        type="button"
-                        onClick={handleResendCode}
-                        className="text-brand-primary dark:text-brand-secondary hover:underline font-bold transition-all cursor-pointer"
-                      >
-                        Resend code
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setVerifying(false);
-                          setError("");
-                        }}
-                        className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-all cursor-pointer mt-1"
-                      >
-                        Go back and change email
-                      </button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            )}
           </div>
         </div>
       </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { useUser } from "@clerk/nextjs";
+import { useUser } from "@/context/SanctumAuthContext";
 import { api } from "@/lib/axios";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { motion, AnimatePresence } from "framer-motion";

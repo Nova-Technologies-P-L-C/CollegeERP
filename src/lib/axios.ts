@@ -8,15 +8,18 @@ export const api = axios.create({
 });
 
 if (typeof window !== "undefined") {
-  api.interceptors.request.use(async (config) => {
+  api.interceptors.request.use((config) => {
     try {
-      // Access Clerk instance dynamically from the window object
-      // @ts-expect-error - Clerk is attached to window by ClerkProvider in browser context
-      const clerk = window.Clerk;
-      if (clerk?.session) {
-        const token = await clerk.session.getToken();
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
+      const sanctumToken = localStorage.getItem("auth_token");
+      if (sanctumToken) {
+        config.headers.Authorization = `Bearer ${sanctumToken}`;
+      } else {
+        // Fallback for Clerk instance if available
+        // @ts-expect-error - Clerk attached dynamically
+        const clerk = window.Clerk;
+        const clerkToken = clerk?.session?.getToken?.();
+        if (clerkToken) {
+          config.headers.Authorization = `Bearer ${clerkToken}`;
         }
       }
     } catch (error) {

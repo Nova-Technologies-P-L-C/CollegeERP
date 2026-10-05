@@ -166,41 +166,61 @@ export async function POST(request: NextRequest) {
 
     const programLevel = body.programLevel || "BS";
 
-    // --- Attempt Limiting ---
-    // 1. Check if student is blocked (2+ rejections)
-    const blockedAdmission = await prisma.admission.findFirst({
-      where: { email: body.email, blocked: true },
+    const currentUser = await prisma.user.findUnique({
+      where: { clerkId: userId },
+      select: { role: true },
     });
-    if (blockedAdmission) {
-      return errorResponse(
-        "FORBIDDEN",
-        "Your account has been blocked after multiple rejected applications. Please contact the admin office to request reactivation.",
-        403
-      );
-    }
+    const isStaff = currentUser?.role === "ADMIN" || currentUser?.role === "FACULTY";
 
-    // 2. Prevent duplicate submissions — cannot submit if a Pending one exists
-    const pendingAdmission = await prisma.admission.findFirst({
-      where: { email: body.email, status: "Pending" },
-    });
-    if (pendingAdmission) {
-      return errorResponse(
-        "BAD_REQUEST",
-        "You already have a pending admission application. Please wait for admin review.",
-        400
-      );
-    }
+    if (!isStaff) {
+      // --- Attempt Limiting for student self-submissions ---
+      // 1. Check if student is blocked (2+ rejections)
+      const blockedAdmission = await prisma.admission.findFirst({
+        where: { email: body.email, blocked: true },
+      });
+      if (blockedAdmission) {
+        return errorResponse(
+          "FORBIDDEN",
+          "Your account has been blocked after multiple rejected applications. Please contact the admin office to request reactivation.",
+          403
+        );
+      }
 
-    // 3. Count rejected admissions to warn / enforce limit
-    const rejectedCount = await prisma.admission.count({
-      where: { email: body.email, status: "Rejected" },
-    });
-    if (rejectedCount >= 2) {
-      return errorResponse(
-        "FORBIDDEN",
-        "Your account has been blocked after 2 rejected applications. Please contact the admin office.",
-        403
-      );
+      // 2. Prevent duplicate submissions — cannot submit if a Pending one exists
+      const pendingAdmission = await prisma.admission.findFirst({
+        where: { email: body.email, status: "Pending" },
+      });
+      if (pendingAdmission) {
+        return errorResponse(
+          "BAD_REQUEST",
+          "You already have a pending admission application. Please wait for admin review.",
+          400
+        );
+      }
+
+      // 3. Count rejected admissions to warn / enforce limit
+      const rejectedCount = await prisma.admission.count({
+        where: { email: body.email, status: "Rejected" },
+      });
+      if (rejectedCount >= 2) {
+        return errorResponse(
+          "FORBIDDEN",
+          "Your account has been blocked after 2 rejected applications. Please contact the admin office.",
+          403
+        );
+      }
+    } else {
+      // For staff submissions, prevent creating duplicate pending applications for the same email
+      const existingPending = await prisma.admission.findFirst({
+        where: { email: body.email, status: "Pending" },
+      });
+      if (existingPending) {
+        return errorResponse(
+          "BAD_REQUEST",
+          `An active application for ${body.email} is already awaiting fee clearance at the Accountant desk.`,
+          400
+        );
+      }
     }
 
     const admission = await prisma.admission.create({

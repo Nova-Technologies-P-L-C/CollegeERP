@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { StatsCard } from "@/components/dashboard/StatsCard";
 import { PageHeader } from "@/components/dashboard/PageHeader";
-import { useUser } from "@clerk/nextjs";
+import { useUser } from "@/context/SanctumAuthContext";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {

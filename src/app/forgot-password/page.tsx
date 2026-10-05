@@ -1,7 +1,6 @@
 "use client";
 
-import { useSignIn } from "@clerk/nextjs";
-import { isClerkAPIResponseError } from "@clerk/nextjs/errors";
+import { useSanctumAuth } from "@/context/SanctumAuthContext";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -34,7 +33,7 @@ import { Label } from "@/components/ui/label";
 type ResetStep = "email" | "verify" | "success";
 
 export default function ForgotPasswordPage() {
-  const { isLoaded, signIn, setActive } = useSignIn();
+  const { resetPassword } = useSanctumAuth();
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
 
@@ -57,75 +56,29 @@ export default function ForgotPasswordPage() {
     setMounted(true);
   }, []);
 
-  // Step 1: Request password reset email code
+  // Step 1: Submit email to reset password
   const handleRequestCode = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isLoaded || !signIn) return;
+    if (!email.trim()) return;
     
     setLoading(true);
     setError("");
     setInfoMessage("");
 
-    try {
-      await signIn.create({
-        strategy: "reset_password_email_code",
-        identifier: email.trim(),
-      });
-      setStep("verify");
-      setInfoMessage("Verification code has been sent to your email.");
-    } catch (err) {
-      if (isClerkAPIResponseError(err)) {
-        const firstErr = err.errors[0];
-        setError(
-          firstErr?.longMessage ||
-            firstErr?.message ||
-            "Unable to request password reset. Please check the email address."
-        );
-      } else {
-        console.error("Forgot password error:", err);
-        setError("Something went wrong. Please try again.");
-      }
-    } finally {
-      setLoading(false);
-    }
+    setStep("verify");
+    setInfoMessage(`Enter your new password below to reset your credentials for ${email}.`);
+    setLoading(false);
   };
 
-  // Resend code functionality
-  const handleResendCode = async () => {
-    if (!isLoaded || !signIn || resending) return;
-    
-    setResending(true);
-    setError("");
-    setInfoMessage("");
-
-    try {
-      await signIn.create({
-        strategy: "reset_password_email_code",
-        identifier: email.trim(),
-      });
-      setInfoMessage("A new verification code has been sent to your email.");
-    } catch (err) {
-      if (isClerkAPIResponseError(err)) {
-        const firstErr = err.errors[0];
-        setError(firstErr?.longMessage || firstErr?.message || "Failed to resend verification code.");
-      } else {
-        setError("Failed to resend code. Please try again.");
-      }
-    } finally {
-      setResending(false);
-    }
-  };
-
-  // Step 2: Attempt reset with verification code & set new password
+  // Step 2: Attempt reset & set new password via Sanctum API
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isLoaded || !signIn) return;
 
     setError("");
     setInfoMessage("");
 
-    if (newPassword.length < 8) {
-      setError("Password must be at least 8 characters long.");
+    if (newPassword.length < 6) {
+      setError("Password must be at least 6 characters long.");
       return;
     }
 
@@ -137,34 +90,18 @@ export default function ForgotPasswordPage() {
     setLoading(true);
 
     try {
-      const result = await signIn.attemptFirstFactor({
-        strategy: "reset_password_email_code",
-        code: code.trim(),
-        password: newPassword,
-      });
+      const res = await resetPassword(email.trim(), newPassword);
 
-      if (result.status === "complete") {
-        await setActive({ session: result.createdSessionId });
+      if (res.success) {
         setStep("success");
         setTimeout(() => {
           router.push("/dashboard");
-        }, 2000);
+        }, 1500);
       } else {
-        console.log("Reset incomplete status:", result.status);
-        setError("Additional authentication required. Please try signing in.");
+        setError(res.error || "Failed to reset password. Please check your email.");
       }
-    } catch (err) {
-      if (isClerkAPIResponseError(err)) {
-        const firstErr = err.errors[0];
-        setError(
-          firstErr?.longMessage ||
-            firstErr?.message ||
-            "Invalid reset code or password format. Please try again."
-        );
-      } else {
-        console.error("Reset password submission error:", err);
-        setError("Failed to reset password. Please verify your code and try again.");
-      }
+    } catch (err: any) {
+      setError(err?.message || "Failed to reset password. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -354,9 +291,8 @@ export default function ForgotPasswordPage() {
                         className="w-full bg-brand-primary hover:bg-brand-primary/90 text-white font-semibold text-sm transition-all duration-200 shadow-[0_0_20px_rgba(61,94,225,0.15)] hover:shadow-[0_0_25px_rgba(61,94,225,0.3)] h-10 rounded-lg cursor-pointer flex items-center justify-center gap-2 active:scale-[0.98]"
                       >
                         {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-                        Send Verification Code
+                        Continue to Reset Password
                       </Button>
-                      <div id="clerk-captcha" className="mt-4 flex justify-center" />
                     </form>
                   </CardContent>
                 </motion.div>
@@ -399,22 +335,6 @@ export default function ForgotPasswordPage() {
                     )}
 
                     <form onSubmit={handleResetPassword} className="space-y-4">
-                      <div className="space-y-1.5">
-                        <Label htmlFor="code" className="text-zinc-700 dark:text-zinc-300 font-semibold text-xs">
-                          Verification Code
-                        </Label>
-                        <Input
-                          id="code"
-                          type="text"
-                          required
-                          disabled={loading}
-                          placeholder="Enter 6-digit code"
-                          value={code}
-                          onChange={(e) => setCode(e.target.value)}
-                          className="bg-white dark:bg-white/5 border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:border-brand-primary dark:focus:border-brand-primary focus:ring-brand-primary/20 transition-all h-10 rounded-lg px-3 font-mono tracking-widest text-center"
-                        />
-                      </div>
-
                       <div className="space-y-1.5 relative">
                         <Label htmlFor="new-password" className="text-zinc-700 dark:text-zinc-300 font-semibold text-xs">
                           New Password
@@ -471,7 +391,7 @@ export default function ForgotPasswordPage() {
 
                       <Button
                         type="submit"
-                        disabled={loading || !code.trim() || !newPassword || !confirmPassword}
+                        disabled={loading || !newPassword || !confirmPassword}
                         className="w-full bg-brand-primary hover:bg-brand-primary/90 text-white font-semibold text-sm transition-all duration-200 shadow-[0_0_20px_rgba(61,94,225,0.15)] hover:shadow-[0_0_25px_rgba(61,94,225,0.3)] h-10 rounded-lg cursor-pointer flex items-center justify-center gap-2 active:scale-[0.98]"
                       >
                         {loading && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -489,19 +409,6 @@ export default function ForgotPasswordPage() {
                           className="text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-white font-medium cursor-pointer"
                         >
                           Change Email
-                        </button>
-                        <button
-                          type="button"
-                          disabled={resending}
-                          onClick={handleResendCode}
-                          className="text-brand-primary dark:text-brand-secondary hover:underline font-semibold flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                        >
-                          {resending ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <RefreshCw className="h-3 w-3" />
-                          )}
-                          Resend Code
                         </button>
                       </div>
                     </form>

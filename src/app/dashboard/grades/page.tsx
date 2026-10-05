@@ -5,7 +5,7 @@ import { api } from "@/lib/axios";
 import { Save, CheckCircle, Trash2, RefreshCw } from "lucide-react";
 import { AuditBadgeInline } from "@/components/dashboard/AuditBadge";
 import { PageHeader } from "@/components/dashboard/PageHeader";
-import { useUser } from "@clerk/nextjs";
+import { useUser } from "@/context/SanctumAuthContext";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

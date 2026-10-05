@@ -1,24 +1,32 @@
-import { auth } from "@clerk/nextjs/server";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { UserManagementClient } from "./UserManagementClient";
-import prisma from "@/lib/prisma";
+
+export const dynamic = "force-dynamic";
 
 export default async function UsersPage() {
-  const { userId, sessionClaims } = await auth();
-  if (!userId) redirect("/sign-in");
+  const cookieStore = await cookies();
+  const token = cookieStore.get("auth_token")?.value;
+  if (!token) redirect("/sign-in");
 
-  const metadata = sessionClaims?.metadata as Record<string, unknown> | undefined;
-  let role = typeof metadata?.role === "string" ? metadata.role.toUpperCase() : undefined;
-
-  if (!role) {
-    const dbUser = await prisma.user.findUnique({
-      where: { clerkId: userId },
-      select: { role: true },
+  try {
+    const res = await fetch("http://127.0.0.1:8000/api/me", {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+      cache: "no-store",
     });
-    role = dbUser?.role;
-  }
 
-  if (role !== "ADMIN") redirect("/dashboard");
+    if (!res.ok) redirect("/sign-in");
+
+    const user = await res.json();
+    if ((user.role || "").toUpperCase() !== "ADMIN") {
+      redirect("/dashboard");
+    }
+  } catch (err) {
+    console.error("UsersPage fetch user error:", err);
+  }
 
   return <UserManagementClient />;
 }

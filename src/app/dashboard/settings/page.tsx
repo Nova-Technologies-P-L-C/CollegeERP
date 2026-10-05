@@ -1,32 +1,31 @@
-import { auth } from "@clerk/nextjs/server";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import prisma from "@/lib/prisma";
 import { SettingsTabs } from "./SettingsTabs";
 
-/**
- * Settings page — Server Component wrapper.
- * Fetches the full profile record to power the split-panel settings UI.
- */
-export default async function SettingsPage() {
-  const { userId } = await auth();
-  if (!userId) redirect("/sign-in");
+export const dynamic = "force-dynamic";
 
-  const dbUser = await prisma.user.findUnique({
-    where: { clerkId: userId },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      avatar: true,
-      student: {
-        select: { phone: true, department: true, rollNo: true },
+export default async function SettingsPage() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("auth_token")?.value;
+  if (!token) redirect("/sign-in");
+
+  let dbUser: any = null;
+
+  try {
+    const res = await fetch("http://127.0.0.1:8000/api/me", {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
       },
-      faculty: {
-        select: { phone: true, department: true },
-      },
-    },
-  });
+      cache: "no-store",
+    });
+
+    if (!res.ok) redirect("/sign-in");
+
+    dbUser = await res.json();
+  } catch (err) {
+    console.error("SettingsPage fetch error:", err);
+  }
 
   if (!dbUser) redirect("/sign-in");
 

@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import Link from "next/link";
-import { SignedIn, SignedOut } from "@clerk/nextjs";
+import { SignedIn, SignedOut } from "@/context/SanctumAuthContext";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   ArrowRight,

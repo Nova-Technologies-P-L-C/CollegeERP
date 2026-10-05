@@ -6,7 +6,7 @@ import { api } from "@/lib/axios";
 import { getLocalTodayString } from "@/lib/utils";
 import { useStoredState } from "@/hooks/useStoredState";
 import { PageHeader } from "@/components/dashboard/PageHeader";
-import { useUser } from "@clerk/nextjs";
+import { useUser } from "@/context/SanctumAuthContext";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

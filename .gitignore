@@ -45,3 +45,18 @@ next-env.d.ts
 
 # clerk configuration (can include secrets)
 /.clerk/
+
+# laravel backend
+backend/vendor/
+backend/.env
+backend/.env.*
+backend/database/*.sqlite
+backend/storage/*.key
+backend/storage/logs/*.log
+backend/bootstrap/cache/*.php
+
+# editor temp / swap files
+*.save
+*.save.*
+*~
+*.bak

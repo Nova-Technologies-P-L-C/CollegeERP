@@ -8,7 +8,7 @@ import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { getNavItems } from "@/lib/sidebar-config";
 import type { UserRole } from "@/types";
 import { api } from "@/lib/axios";
-import { useAuth } from "@clerk/nextjs";
+import { useAuth } from "@/context/SanctumAuthContext";
 
 interface DashboardShellProps {
   children: React.ReactNode;
@@ -109,7 +109,13 @@ export function DashboardShell({ children, role, roleLabel }: DashboardShellProp
 
         setNavItems((prev) =>
           prev.map((item) => {
-            if (item.title === "Admissions") {
+            if (item.title === "Registrar Desk") {
+              return { ...item, badge: admissionsCount > 0 ? admissionsCount : undefined };
+            }
+            if (item.title === "Accountant Desk") {
+              return { ...item, badge: admissionsCount > 0 ? admissionsCount : undefined };
+            }
+            if (item.title === "Admissions Pipeline" || item.title === "Admissions") {
               return { ...item, badge: totalAdmissionsCount > 0 ? totalAdmissionsCount : undefined };
             }
             if (item.title === "Feedback") {

@@ -18,7 +18,13 @@ export async function PATCH(
 
     const adminName = await getAdminName(userId);
     const { id } = await params;
-    const body = (await request.json()) as { status: "Approved" | "Rejected" | "Pending"; unblock?: boolean };
+    const body = (await request.json()) as { 
+      status: "Approved" | "Rejected" | "Pending"; 
+      unblock?: boolean;
+      paymentMethod?: string;
+      receiptNo?: string;
+      paidAmount?: number;
+    };
 
     if (!body.status || !["Approved", "Rejected", "Pending"].includes(body.status)) {
       return NextResponse.json(
@@ -29,7 +35,7 @@ export async function PATCH(
 
     let updatedAdmission;
 
-    // Auto-provision Student + User + Enrollments when approved
+    // Auto-provision Student + User + Enrollments + Admission Fee when approved
     if (body.status === "Approved") {
       try {
         updatedAdmission = await prisma.$transaction(async (tx) => {
@@ -89,6 +95,9 @@ export async function PATCH(
           const nextSeq = maxSeq + 1;
           const rollNo = `${prefix}${String(nextSeq).padStart(2, "0")}`;
 
+          let targetStudentId: string | null = null;
+          let targetSemester = adm.semester || 1;
+
           if (!existingUser) {
             // Create User + Student + enrollments
             const newUser = await tx.user.create({
@@ -116,6 +125,9 @@ export async function PATCH(
                 approvedBy: adminName,
               },
             });
+
+            targetStudentId = student.id;
+            targetSemester = student.semester || 1;
 
             // Auto-enroll student in ALL courses matching program level and discipline/part or department/semester
             const courseWhere: Prisma.CourseWhereInput = {
@@ -164,6 +176,9 @@ export async function PATCH(
               },
             });
 
+            targetStudentId = student.id;
+            targetSemester = student.semester || 1;
+
             const courseWhere: Prisma.CourseWhereInput = {
               programLevel: adm.programLevel,
             };
@@ -185,9 +200,32 @@ export async function PATCH(
                 },
               });
             }
+          } else {
+            targetStudentId = existingUser.student.id;
+            targetSemester = existingUser.student.semester || 1;
           }
 
-          return adm;
+          // Auto-create Paid Admission Fee record if payment was captured
+          if (targetStudentId) {
+            const feeAmount = typeof body.paidAmount === "number" && body.paidAmount > 0 ? body.paidAmount : 5000;
+            const feeType = body.receiptNo
+              ? `Admission Fee (${body.paymentMethod || "Direct Payment"} - Ref: ${body.receiptNo})`
+              : "Admission & Registration Fee";
+
+            await tx.fee.create({
+              data: {
+                studentId: targetStudentId,
+                type: feeType,
+                amount: feeAmount,
+                status: "Paid",
+                dueDate: new Date(),
+                paidDate: new Date(),
+                semester: targetSemester,
+              },
+            });
+          }
+
+          return { ...adm, generatedRollNo: rollNo };
         });
 
         // 3. Sync Clerk role to publicMetadata if linked account exists
@@ -207,11 +245,12 @@ export async function PATCH(
           }
         }
 
+        const receiptDetail = body.receiptNo ? ` [Receipt: ${body.receiptNo}, Amount: ${body.paidAmount || 5000} ETB]` : "";
         await logAuditAction({
           action: "UPDATED",
           entity: "Admission",
           entityId: id,
-          description: `Approved admission for ${updatedAdmission.studentName} — Student record and course enrollments auto-created`,
+          description: `Approved admission for ${updatedAdmission.studentName}${receiptDetail} — Student record (${updatedAdmission.generatedRollNo || "Active"}) & Paid Admission Fee created`,
           adminClerkId: userId,
           adminName,
         });
