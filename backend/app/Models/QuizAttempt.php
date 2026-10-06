@@ -11,7 +11,7 @@ class QuizAttempt extends BaseModel
         'score' => 'integer',
         'totalMarks' => 'integer',
         'submittedAt' => 'datetime',
-        'answers' => 'array',
+        'answers' => \App\Casts\PgArray::class,
     ];
 
     public function quiz()

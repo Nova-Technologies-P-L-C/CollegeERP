@@ -228,15 +228,22 @@ export default function AlumniDirectoryPage() {
                       </div>
 
                       <div className="flex items-center justify-between pt-1 text-[11px]">
-                        <Badge variant="outline" className="text-[10px] px-2 py-0.5 rounded-md font-semibold">
-                          {person.shift} Shift
-                        </Badge>
-                        {person.cgpa !== null && person.cgpa !== undefined && (
+                        {programLevel === "BS" ? (
+                          <Badge variant="outline" className="text-[10px] px-2 py-0.5 rounded-md font-semibold">
+                            {person.shift} Shift
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px] px-2 py-0.5 rounded-md font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30">
+                            HSSC Completed
+                          </Badge>
+                        )}
+                        {programLevel === "BS" && person.cgpa !== null && person.cgpa !== undefined && (
                           <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
                             CGPA: {Number(person.cgpa).toFixed(2)}
                           </span>
                         )}
                       </div>
+
                     </CardContent>
                   </Card>
                 ) : (
@@ -266,7 +273,7 @@ export default function AlumniDirectoryPage() {
                           </div>
                         </div>
 
-                        {person.cgpa !== null && person.cgpa !== undefined && (
+                        {programLevel === "BS" && person.cgpa !== null && person.cgpa !== undefined && (
                           <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-extrabold text-[11px] px-2.5 py-1 rounded-xl border border-emerald-500/20 shrink-0">
                             CGPA {Number(person.cgpa).toFixed(2)}
                           </Badge>

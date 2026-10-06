@@ -60,7 +60,10 @@ interface StudentItem {
   rollNo: string;
   phone: string | null;
   department: string;
+  discipline?: string | null;
+  programLevel?: string | null;
   semester: number;
+  part?: number | null;
   shift: string;
   blocked: boolean;
   readmitRequested?: boolean;
@@ -147,7 +150,7 @@ export default function ManageAttendancePage() {
 
   useEffect(() => {
     if (isLoaded && isAdmin) {
-      if (!selectedDept) setSelectedDept(getDisciplinesForLevel(programLevel)[0] || "Computer Science");
+      if (!selectedDept) setSelectedDept(programLevel === "INTERMEDIATE" ? "F.Sc Pre-Engineering" : (getDisciplinesForLevel(programLevel)[0] || "Computer Science"));
       if (!selectedSemester) setSelectedSemester(1);
     }
   }, [isLoaded, isAdmin, selectedDept, selectedSemester, programLevel, setSelectedDept, setSelectedSemester]);
@@ -186,8 +189,9 @@ export default function ManageAttendancePage() {
         content: `Student ${struckOffStudent.user?.name || "Unknown"} (${struckOffStudent.rollNo}) has been struck off from attendance logs by instructor. Reason: ${struckOffReason}`,
         audience: "Students",
         priority: "High",
-        targetDepartment: struckOffStudent.department,
-        targetSemester: struckOffStudent.semester,
+        programLevel: struckOffStudent.programLevel || programLevel,
+        targetDepartment: struckOffStudent.discipline || struckOffStudent.department,
+        targetSemester: struckOffStudent.part || struckOffStudent.semester,
       });
 
       // Update local state
@@ -1034,8 +1038,9 @@ export default function ManageAttendancePage() {
                     content: `Student ${selectedStudent.user?.name || "Unknown"} (${selectedStudent.rollNo}) has been struck off in ${activeCourseCode} due to ${coursePct}% attendance (<70%).`,
                     audience: "Students",
                     priority: "High",
-                    targetDepartment: selectedStudent.department,
-                    targetSemester: selectedStudent.semester,
+                    programLevel: selectedStudent.programLevel || programLevel,
+                    targetDepartment: selectedStudent.discipline || selectedStudent.department,
+                    targetSemester: selectedStudent.part || selectedStudent.semester,
                   });
                   setStudents((prev) =>
                     prev.map((s) =>

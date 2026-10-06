@@ -64,8 +64,10 @@ class TimetableController extends Controller
             'day' => 'required|string',
             'startTime' => 'required|string|regex:/^([01]\d|2[0-3]):([0-5]\d)$/',
             'endTime' => 'required|string|regex:/^([01]\d|2[0-3]):([0-5]\d)$/',
-            'shift' => 'nullable|string|default:Morning',
+            'shift' => 'nullable|string',
         ]);
+
+        $validated['shift'] = $validated['shift'] ?? 'Morning';
 
         $course = Course::find($validated['courseId']);
         if (!$course) {
@@ -222,4 +224,152 @@ class TimetableController extends Controller
 
         return response()->json($settings);
     }
+
+    public function batch(Request $request)
+    {
+        $admin = $request->attributes->get('user') ?? auth()->user();
+
+        $validated = $request->validate([
+            'entries' => 'required|array|min:1',
+            'entries.*.courseId' => 'required|string',
+            'entries.*.room' => 'required|string',
+            'entries.*.day' => 'required|string',
+            'entries.*.startTime' => 'required|string',
+            'entries.*.endTime' => 'required|string',
+            'shift' => 'nullable|string',
+            'department' => 'nullable|string',
+            'semester' => 'nullable|integer',
+        ]);
+
+        $created = [];
+        foreach ($validated['entries'] as $entry) {
+            $shift = $entry['shift'] ?? $validated['shift'] ?? 'Morning';
+            $t = Timetable::create([
+                'courseId' => $entry['courseId'],
+                'room' => $entry['room'],
+                'day' => $entry['day'],
+                'startTime' => $entry['startTime'],
+                'endTime' => $entry['endTime'],
+                'shift' => $shift,
+            ]);
+            $created[] = $t;
+        }
+
+        AuditLogService::log(
+            'CREATED',
+            'Timetable',
+            'batch',
+            "Batch created " . count($created) . " timetable entries",
+            $admin->clerkId ?? null,
+            $admin->name ?? null
+        );
+
+        return response()->json([
+            'success' => true,
+            'count' => count($created),
+            'entries' => $created,
+        ]);
+    }
+
+    public function autoGenerate(Request $request)
+    {
+        $admin = $request->attributes->get('user') ?? auth()->user();
+
+        $programLevel = $request->input('programLevel', 'BS');
+        $department = $request->input('department', '');
+        $semester = (int) $request->input('semester', 1);
+        $discipline = $request->input('discipline', $department);
+        $part = (int) $request->input('part', $semester);
+        $shift = $request->input('shift', 'Morning');
+        $rooms = $request->input('rooms', ['Room 101', 'Room 102', 'Lab 1']);
+        $startTime = $request->input('startTime', '07:45');
+        $duration = (int) $request->input('duration', 45);
+        $slotsCount = (int) $request->input('slotsCount', 7);
+        $days = $request->input('days', ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']);
+        $overwrite = (bool) $request->input('overwriteExisting', true);
+
+        // Fetch courses for this cohort
+        $query = Course::where('programLevel', $programLevel);
+        if ($programLevel === 'INTERMEDIATE') {
+            $query->where('discipline', $discipline)->where('part', $part);
+        } else {
+            $query->where('department', $department)->where('semester', $semester);
+        }
+        $courses = $query->get();
+
+        if ($courses->isEmpty()) {
+            return response()->json(['error' => 'No courses found for the specified program/semester.'], 404);
+        }
+
+        $courseIds = $courses->pluck('id')->toArray();
+
+        if ($overwrite) {
+            Timetable::whereIn('courseId', $courseIds)->where('shift', $shift)->delete();
+        }
+
+        // Generate timeslots
+        $timeSlots = [];
+        $currentStart = Carbon::parse($startTime);
+        for ($i = 0; $i < $slotsCount; $i++) {
+            $currentEnd = $currentStart->copy()->addMinutes($duration);
+            $timeSlots[] = [
+                'start' => $currentStart->format('H:i'),
+                'end' => $currentEnd->format('H:i'),
+            ];
+            $currentStart = $currentEnd;
+        }
+
+        $generated = [];
+        $courseIndex = 0;
+        $courseCount = count($courses);
+
+        foreach ($days as $day) {
+            foreach ($timeSlots as $slot) {
+                if ($courseIndex >= $courseCount * 2) {
+                    break;
+                }
+                $c = $courses[$courseIndex % $courseCount];
+                $room = $rooms[($courseIndex) % count($rooms)];
+
+                // Check conflict
+                $conflict = Timetable::where('day', $day)
+                    ->where('room', $room)
+                    ->where(function ($q) use ($slot) {
+                        $q->whereBetween('startTime', [$slot['start'], $slot['end']])
+                          ->orWhereBetween('endTime', [$slot['start'], $slot['end']]);
+                    })->exists();
+
+                if (!$conflict) {
+                    $entry = Timetable::create([
+                        'courseId' => $c->id,
+                        'room' => $room,
+                        'day' => $day,
+                        'startTime' => $slot['start'],
+                        'endTime' => $slot['end'],
+                        'shift' => $shift,
+                    ]);
+                    $generated[] = $entry;
+                }
+
+                $courseIndex++;
+            }
+        }
+
+        AuditLogService::log(
+            'CREATED',
+            'Timetable',
+            'auto-generate',
+            "Auto-generated " . count($generated) . " timetable entries for {$programLevel} ({$shift})",
+            $admin->clerkId ?? null,
+            $admin->name ?? null
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Timetable generated successfully',
+            'count' => count($generated),
+            'entries' => $generated,
+        ]);
+    }
 }
+

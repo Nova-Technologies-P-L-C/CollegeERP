@@ -22,11 +22,43 @@ class RequireRoleMiddleware
 
         // Normalize roles to uppercase
         $allowed = array_map('strtoupper', $roles);
+        $userRole = strtoupper($user->role);
 
-        if (!in_array(strtoupper($user->role), $allowed)) {
+        // Direct match for non-admin roles (FACULTY, STUDENT)
+        if (in_array($userRole, ['FACULTY', 'STUDENT'])) {
+            if (in_array($userRole, $allowed)) {
+                return $next($request);
+            }
             return response()->json(['error' => 'Forbidden'], 403);
         }
 
-        return $next($request);
+        // If user is an ADMIN, inspect their specific adminType
+        if ($userRole === 'ADMIN') {
+            if (!$user->relationLoaded('admin')) {
+                $user->load('admin');
+            }
+            $adminType = $user->admin ? strtoupper($user->admin->adminType) : 'BRANCH_ADMIN';
+
+            // Platform Admin and Branch Admin hold full ADMIN administrative privileges
+            if (in_array($adminType, ['PLATFORM_ADMIN', 'BRANCH_ADMIN']) && in_array('ADMIN', $allowed)) {
+                return $next($request);
+            }
+
+            // Check if user's specific adminType (REGISTRAR, ACCOUNTANT, ORG_ADMIN) is allowed
+            if (in_array($adminType, $allowed)) {
+                return $next($request);
+            }
+
+            // General ADMIN allowed if not restricted to specialized desks
+            if (in_array('ADMIN', $allowed) && !in_array($adminType, ['REGISTRAR', 'ACCOUNTANT', 'ORG_ADMIN'])) {
+                return $next($request);
+            }
+
+            return response()->json([
+                'error' => "Forbidden: insufficient permissions for {$adminType}"
+            ], 403);
+        }
+
+        return response()->json(['error' => 'Forbidden'], 403);
     }
 }

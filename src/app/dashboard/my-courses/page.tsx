@@ -35,7 +35,8 @@ interface CourseWithDetails {
   assignedFacultyEvening?: string | null;
   shift?: string;
   faculty: { user: { name: string | null; email?: string | null }; department: string } | null;
-  _count: { enrollments: number };
+  _count?: { enrollments?: number };
+  enrollments_count?: number;
 }
 
 const COURSE_COLORS = [
@@ -162,7 +163,7 @@ export default function MyCoursesPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         {filteredCourses.map((course, idx) => {
           const facultyName = course.faculty?.user?.name ?? "TBA";
-          const studentCount = course._count.enrollments;
+          const studentCount = course._count?.enrollments ?? course.enrollments_count ?? 0;
 
           return (
             <motion.div

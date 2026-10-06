@@ -4,7 +4,7 @@ import { useSanctumAuth } from "@/context/SanctumAuthContext";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Sparkles, CheckCircle2, Eye, EyeOff, Loader2, AlertCircle, Building2, Shield, UserPlus, Receipt, GraduationCap, BookOpen } from "lucide-react";
+import { ArrowLeft, Sparkles, CheckCircle2, Eye, EyeOff, Loader2, AlertCircle, Building2, Shield, ShieldCheck, UserPlus, Receipt, GraduationCap, BookOpen } from "lucide-react";
 import { ThemeToggle } from "@/components/dashboard/ThemeToggle";
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
@@ -14,16 +14,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 const DEMO_ACCOUNTS = [
-  { label: "Org Admin",   email: "demo.orgadmin@novatechnology.com",   icon: Building2,     color: "text-purple-600 dark:text-purple-400",  bg: "bg-purple-500/10" },
-  { label: "Branch Admin",email: "demo.admin@novatechnology.com",       icon: Shield,        color: "text-blue-600 dark:text-blue-400",      bg: "bg-blue-500/10"   },
-  { label: "Registrar",   email: "demo.registrar@novatechnology.com",   icon: UserPlus,      color: "text-amber-600 dark:text-amber-400",    bg: "bg-amber-500/10"  },
-  { label: "Accountant",  email: "demo.accountant@novatechnology.com",  icon: Receipt,       color: "text-emerald-600 dark:text-emerald-400",bg: "bg-emerald-500/10"},
-  { label: "Faculty",     email: "demo.faculty@novatechnology.com",     icon: GraduationCap, color: "text-indigo-600 dark:text-indigo-400",  bg: "bg-indigo-500/10" },
-  { label: "Student",     email: "demo.student1@novatechnology.com",    icon: BookOpen,      color: "text-teal-600 dark:text-teal-400",      bg: "bg-teal-500/10"   },
+  { label: "Platform Admin", email: "admin@novatechnology.com",         target: "/dashboard/platform-admin", icon: ShieldCheck,   color: "text-rose-600 dark:text-rose-400",     bg: "bg-rose-500/10"   },
+  { label: "Org Admin",    email: "demo.orgadmin@novatechnology.com",   target: "/dashboard/org-admin",    icon: Building2,     color: "text-purple-600 dark:text-purple-400",  bg: "bg-purple-500/10" },
+  { label: "Branch Admin", email: "demo.admin@novatechnology.com",      target: "/dashboard",              icon: Shield,        color: "text-blue-600 dark:text-blue-400",      bg: "bg-blue-500/10"   },
+  { label: "Registrar",    email: "demo.registrar@novatechnology.com",  target: "/dashboard/registrar",    icon: UserPlus,      color: "text-amber-600 dark:text-amber-400",    bg: "bg-amber-500/10"  },
+  { label: "Accountant",   email: "demo.accountant@novatechnology.com", target: "/dashboard/accountant",   icon: Receipt,       color: "text-emerald-600 dark:text-emerald-400",bg: "bg-emerald-500/10"},
+  { label: "Faculty",      email: "demo.faculty@novatechnology.com",    target: "/dashboard",              icon: GraduationCap, color: "text-indigo-600 dark:text-indigo-400",  bg: "bg-indigo-500/10" },
+  { label: "Student",      email: "demo.student1@novatechnology.com",   target: "/dashboard",              icon: BookOpen,      color: "text-teal-600 dark:text-teal-400",      bg: "bg-teal-500/10"   },
 ];
 
 export default function SignInPage() {
-  const { isLoaded, login } = useSanctumAuth();
+  const { login } = useSanctumAuth();
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
 
@@ -34,22 +35,22 @@ export default function SignInPage() {
   
   // Interaction states
   const [loading, setLoading] = useState(false);
-  const [socialLoading, setSocialLoading] = useState<"google" | null>(null);
+  const [socialLoading] = useState<"google" | null>(null);
   const [error, setError] = useState("");
   const [demoLoading, setDemoLoading] = useState<string | null>(null);
 
-  const handleDemoLogin = async (demoEmail: string) => {
+  const handleDemoLogin = async (demoEmail: string, targetPath: string = "/dashboard") => {
     setDemoLoading(demoEmail);
     setError("");
     try {
       const res = await login(demoEmail, "password123");
       if (res.success) {
-        router.push("/dashboard");
+        window.location.href = targetPath;
       } else {
         setError(res.error || "Demo login failed.");
       }
-    } catch (err: any) {
-      setError(err?.message || "Demo login failed.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Demo login failed.");
     } finally {
       setDemoLoading(null);
     }
@@ -71,8 +72,8 @@ export default function SignInPage() {
       } else {
         setError(res.error || "Invalid email or password");
       }
-    } catch (err: any) {
-      setError(err?.message || "Invalid email or password");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Invalid email or password");
     } finally {
       setLoading(false);
     }
@@ -358,7 +359,7 @@ export default function SignInPage() {
                 return (
                   <button
                     key={account.email}
-                    onClick={() => handleDemoLogin(account.email)}
+                    onClick={() => handleDemoLogin(account.email, account.target)}
                     disabled={!!demoLoading || loading}
                     className="flex items-center gap-2 p-2.5 rounded-xl border border-zinc-200 dark:border-white/10 bg-white/60 dark:bg-white/5 hover:border-brand-primary/50 hover:bg-brand-primary/5 transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                   >

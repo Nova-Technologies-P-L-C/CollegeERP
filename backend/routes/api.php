@@ -22,6 +22,8 @@ use App\Http\Controllers\Api\AlumniController;
 use App\Http\Controllers\Api\EnrollmentController;
 use App\Http\Controllers\Api\OnboardingController;
 use App\Http\Controllers\Api\ImportController;
+use App\Http\Controllers\Api\SettingsController;
+use App\Http\Controllers\Api\BranchController;
 
 // Public Endpoints
 Route::get('/verify/{userId}', [VerifyController::class, 'verify']);
@@ -56,13 +58,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/courses/{id}', [CourseController::class, 'destroy'])->middleware('role:ADMIN');
 
     // Students
-    Route::get('/students', [StudentController::class, 'index'])->middleware('role:ADMIN,FACULTY');
-    Route::get('/students/left', [StudentController::class, 'left'])->middleware('role:ADMIN,FACULTY');
+    Route::get('/students', [StudentController::class, 'index'])->middleware('role:ADMIN,REGISTRAR,FACULTY,ACCOUNTANT');
+    Route::get('/students/left', [StudentController::class, 'left'])->middleware('role:ADMIN,REGISTRAR,FACULTY');
     Route::post('/students/left', [StudentController::class, 'updateLeft'])->middleware('role:ADMIN');
     Route::post('/students/promote', [StudentController::class, 'promote'])->middleware('role:ADMIN');
     Route::get('/students/{id}', [StudentController::class, 'show']);
-    Route::patch('/students/{id}', [StudentController::class, 'update'])->middleware('role:ADMIN');
-    Route::put('/students/{id}', [StudentController::class, 'update'])->middleware('role:ADMIN');
+    Route::patch('/students/{id}', [StudentController::class, 'update'])->middleware('role:ADMIN,REGISTRAR');
+    Route::put('/students/{id}', [StudentController::class, 'update'])->middleware('role:ADMIN,REGISTRAR');
     Route::delete('/students/{id}', [StudentController::class, 'destroy'])->middleware('role:ADMIN');
 
     // Alumni
@@ -80,18 +82,21 @@ Route::middleware('auth:sanctum')->group(function () {
     // Faculty
     Route::get('/faculty', [FacultyController::class, 'index']);
     Route::get('/faculty/attendance', [FacultyController::class, 'attendance']);
+    Route::post('/faculty/attendance', [FacultyController::class, 'recordAttendance']);
+    Route::get('/faculty/attendance/history', [FacultyController::class, 'attendanceHistory']);
+    Route::post('/faculty/attendance/admin', [FacultyController::class, 'overrideAttendance'])->middleware('role:ADMIN');
     Route::get('/faculty/{id}', [FacultyController::class, 'show']);
     Route::post('/faculty', [FacultyController::class, 'store'])->middleware('role:ADMIN');
     Route::patch('/faculty/{id}', [FacultyController::class, 'update'])->middleware('role:ADMIN');
     Route::delete('/faculty/{id}', [FacultyController::class, 'destroy'])->middleware('role:ADMIN');
 
     // Admissions
-    Route::get('/admissions', [AdmissionController::class, 'index']);
+    Route::get('/admissions', [AdmissionController::class, 'index'])->middleware('role:ADMIN,REGISTRAR,ACCOUNTANT');
     Route::get('/admissions/my-status', [AdmissionController::class, 'myStatus']);
     Route::post('/admissions/import', [ImportController::class, 'importAdmissions'])->middleware('role:ADMIN');
     Route::get('/admissions/{id}', [AdmissionController::class, 'show']);
-    Route::post('/admissions', [AdmissionController::class, 'store']);
-    Route::patch('/admissions/{id}', [AdmissionController::class, 'update'])->middleware('role:ADMIN');
+    Route::post('/admissions', [AdmissionController::class, 'store'])->middleware('role:ADMIN,REGISTRAR');
+    Route::patch('/admissions/{id}', [AdmissionController::class, 'update'])->middleware('role:ADMIN,ACCOUNTANT');
     Route::delete('/admissions/{id}', [AdmissionController::class, 'destroy'])->middleware('role:ADMIN');
 
     // Attendance
@@ -107,19 +112,25 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/grades/{id}', [GradeController::class, 'destroy'])->middleware('role:ADMIN');
 
     // Fees
-    Route::get('/fees', [FeeController::class, 'index']);
-    Route::post('/fees', [FeeController::class, 'store'])->middleware('role:ADMIN');
-    Route::post('/fees/mark-overdue', [FeeController::class, 'markOverdue'])->middleware('role:ADMIN');
-    Route::patch('/fees/{id}', [FeeController::class, 'update'])->middleware('role:ADMIN');
-    Route::delete('/fees/{id}', [FeeController::class, 'destroy'])->middleware('role:ADMIN');
+    Route::get('/fees', [FeeController::class, 'index'])->middleware('role:ADMIN,ACCOUNTANT');
+    Route::post('/fees', [FeeController::class, 'store'])->middleware('role:ADMIN,ACCOUNTANT');
+    Route::post('/fees/mark-overdue', [FeeController::class, 'markOverdue'])->middleware('role:ADMIN,ACCOUNTANT');
+    Route::patch('/fees/{id}', [FeeController::class, 'update'])->middleware('role:ADMIN,ACCOUNTANT');
+    Route::delete('/fees/{id}', [FeeController::class, 'destroy'])->middleware('role:ADMIN,ACCOUNTANT');
 
     // Timetable
     Route::get('/timetable', [TimetableController::class, 'index']);
     Route::get('/timetable/settings', [TimetableController::class, 'getSettings']);
     Route::post('/timetable/settings', [TimetableController::class, 'saveSettings'])->middleware('role:ADMIN');
     Route::post('/timetable', [TimetableController::class, 'store'])->middleware('role:ADMIN');
+    Route::post('/timetable/batch', [TimetableController::class, 'batch'])->middleware('role:ADMIN');
+    Route::post('/timetable/auto-generate', [TimetableController::class, 'autoGenerate'])->middleware('role:ADMIN');
     Route::patch('/timetable/{id}', [TimetableController::class, 'update'])->middleware('role:ADMIN');
     Route::delete('/timetable/{id}', [TimetableController::class, 'destroy'])->middleware('role:ADMIN');
+
+    // Settings
+    Route::get('/settings/admin-secret', [SettingsController::class, 'getAdminSecret'])->middleware('role:ADMIN');
+    Route::post('/settings/admin-secret', [SettingsController::class, 'createAdminSecret'])->middleware('role:ADMIN');
 
     // Quizzes & Questions
     Route::get('/quizzes', [QuizController::class, 'index']);
@@ -156,4 +167,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/users/{id}', [UserController::class, 'show'])->middleware('role:ADMIN');
     Route::patch('/users/{id}', [UserController::class, 'update'])->middleware('role:ADMIN');
     Route::delete('/users/{id}', [UserController::class, 'destroy'])->middleware('role:ADMIN');
+
+    // Branches & Campuses (Multi-Branch Hierarchy & Platform Approvals)
+    Route::get('/branches', [BranchController::class, 'index']);
+    Route::get('/branches/{id}', [BranchController::class, 'show']);
+    Route::post('/branches', [BranchController::class, 'store']);
+    Route::post('/branches/{id}/approve', [BranchController::class, 'approve']);
+    Route::post('/branches/{id}/reject', [BranchController::class, 'reject']);
+    Route::patch('/branches/{id}', [BranchController::class, 'update']);
+    Route::delete('/branches/{id}', [BranchController::class, 'destroy']);
 });

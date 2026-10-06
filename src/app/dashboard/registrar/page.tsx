@@ -13,11 +13,8 @@ import {
   Printer,
   RefreshCw,
   Search,
-  BookOpen,
-  School,
   FileText,
   BadgeAlert,
-  ArrowRight,
 } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { DataTable, Column } from "@/components/dashboard/DataTable";
@@ -64,14 +61,6 @@ interface Admission extends Record<string, unknown> {
   part?: number | null;
 }
 
-interface CourseOption {
-  id: string;
-  courseCode: string;
-  courseName: string;
-  department: string;
-  semester: number;
-}
-
 const DEPARTMENTS = [
   "Computer Science",
   "Mathematics",
@@ -96,7 +85,6 @@ export default function RegistrarDeskPage() {
   const { programLevel } = useProgramLevel();
 
   const [admissions, setAdmissions] = useState<Admission[]>([]);
-  const [courses, setCourses] = useState<CourseOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -149,13 +137,6 @@ export default function RegistrarDeskPage() {
     }
   }, [programLevel, statusFilter]);
 
-  // Fetch available courses
-  useEffect(() => {
-    api
-      .get<CourseOption[]>("/api/courses")
-      .then((res) => setCourses(Array.isArray(res.data) ? res.data : []))
-      .catch((err) => console.error("Failed to load courses:", err));
-  }, []);
 
   useEffect(() => {
     fetchAdmissions();
@@ -636,14 +617,14 @@ export default function RegistrarDeskPage() {
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-sm flex items-center justify-between"
+          className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-sm flex items-center justify-between gap-4"
         >
           <span>{successMsg}</span>
           <Button
             size="sm"
             variant="ghost"
             onClick={() => setSuccessMsg(null)}
-            className="h-7 text-xs text-emerald-700 hover:bg-emerald-100 dark:hover:bg-emerald-900"
+            className="h-8 text-xs text-emerald-700 hover:bg-emerald-100 dark:hover:bg-emerald-900"
           >
             Dismiss
           </Button>
@@ -669,10 +650,7 @@ export default function RegistrarDeskPage() {
           <div className="text-3xl font-extrabold text-amber-600 dark:text-amber-400">
             {stats.pending}
           </div>
-          <p className="text-xs text-muted-foreground flex items-center gap-1">
-            <span>Queued for Accountant Desk</span>
-            <ArrowRight className="h-3 w-3" />
-          </p>
+          <p className="text-xs text-muted-foreground">Queued for Accountant Desk</p>
         </div>
 
         <div className="p-5 rounded-2xl border border-emerald-300/40 bg-emerald-500/5 shadow-sm space-y-2">

@@ -24,15 +24,37 @@ class CourseController extends Controller
         }
 
         if ($request->has('department')) {
-            $query->where('department', $request->query('department'));
+            $dept = $request->query('department');
+            if ($dept !== 'all') {
+                if ($request->query('programLevel') === 'INTERMEDIATE') {
+                    $query->where(function ($q) use ($dept) {
+                        $q->where('discipline', $dept)
+                          ->orWhere('department', $dept);
+                    });
+                } else {
+                    $query->where('department', $dept);
+                }
+            }
         }
 
         if ($request->has('semester')) {
-            $query->where('semester', (int) $request->query('semester'));
+            $sem = (int) $request->query('semester');
+            if ($request->query('programLevel') === 'INTERMEDIATE') {
+                $query->where(function ($q) use ($sem) {
+                    $q->where('part', $sem)
+                      ->orWhere('semester', $sem);
+                });
+            } else {
+                $query->where('semester', $sem);
+            }
         }
 
         if ($request->has('discipline')) {
-            $query->where('discipline', $request->query('discipline'));
+            $disc = $request->query('discipline');
+            $query->where(function ($q) use ($disc) {
+                $q->where('discipline', $disc)
+                  ->orWhere('department', $disc);
+            });
         }
 
         if ($request->has('shift')) {
@@ -91,7 +113,7 @@ class CourseController extends Controller
             'creditHours' => 'required|integer|min:1',
             'totalMarks' => 'nullable|integer',
             'department' => 'required|string',
-            'semester' => 'nullable|integer|default:1',
+            'semester' => 'nullable|integer',
             'programLevel' => 'nullable|string|in:BS,INTERMEDIATE',
             'discipline' => 'nullable|string',
             'part' => 'nullable|integer',
@@ -99,10 +121,23 @@ class CourseController extends Controller
             'assignedFaculty' => 'nullable|string',
             'assignedFacultyMorning' => 'nullable|string',
             'assignedFacultyEvening' => 'nullable|string',
-            'shift' => 'nullable|string|default:Morning',
+            'shift' => 'nullable|string',
         ]);
 
+        $validated['semester'] = $validated['semester'] ?? 1;
+        $validated['shift'] = $validated['shift'] ?? 'Morning';
+
+        if (($validated['programLevel'] ?? 'BS') === 'INTERMEDIATE') {
+            if (empty($validated['discipline'])) {
+                $validated['discipline'] = $validated['department'];
+            }
+            if (empty($validated['part'])) {
+                $validated['part'] = $validated['semester'] ?? 1;
+            }
+        }
+
         $course = Course::create($validated);
+
 
         AuditLogService::log(
             'CREATED',

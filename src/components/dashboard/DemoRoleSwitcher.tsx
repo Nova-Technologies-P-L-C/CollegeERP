@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import {
   Sparkles,
   Building2,
   Shield,
+  ShieldCheck,
   UserPlus,
   Receipt,
   GraduationCap,
@@ -26,9 +26,17 @@ import { Badge } from "@/components/ui/badge";
 
 const DEMO_ROLES = [
   {
+    role: "platform_admin",
+    label: "Platform Admin",
+    description: "ERP Vendor (Nova Tech) — license approvals & client campus provisioning",
+    href: "/dashboard/platform-admin",
+    icon: ShieldCheck,
+    badgeColor: "bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-300",
+  },
+  {
     role: "org_admin",
     label: "Organizational Admin",
-    description: "Executive oversight, macro-analytics & role explorer",
+    description: "Executive oversight, visual graphs & read-only analytics",
     href: "/dashboard/org-admin",
     icon: Building2,
     badgeColor: "bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-300",
@@ -36,7 +44,7 @@ const DEMO_ROLES = [
   {
     role: "branch_admin",
     label: "Branch Admin",
-    description: "Operational campus management & master audit",
+    description: "Operational campus management & sub-branch manager (A → A1, A2)",
     href: "/dashboard",
     icon: Shield,
     badgeColor: "bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-300",
@@ -80,8 +88,44 @@ export function DemoRoleSwitcher() {
   const pathname = usePathname();
 
   const currentRole =
-    DEMO_ROLES.find((r) => pathname === r.href || (r.href !== "/dashboard" && pathname.startsWith(r.href))) ||
-    DEMO_ROLES[1]; // default branch admin
+    DEMO_ROLES.find((r) => {
+      if (r.role === "faculty") {
+        return [
+          "/dashboard/mark-attendance",
+          "/dashboard/classes",
+          "/dashboard/grades",
+          "/dashboard/question-bank",
+          "/dashboard/quizzes",
+        ].some((path) => pathname.startsWith(path));
+      }
+      if (r.role === "student") {
+        return [
+          "/dashboard/my-grades",
+          "/dashboard/my-courses",
+          "/dashboard/my-attendance",
+          "/dashboard/my-dues",
+          "/dashboard/my-timetable",
+          "/dashboard/take-quiz",
+          "/dashboard/submit-feedback",
+        ].some((path) => pathname.startsWith(path));
+      }
+      if (r.role === "registrar") {
+        return (
+          pathname.startsWith("/dashboard/registrar") ||
+          pathname.startsWith("/dashboard/admissions")
+        );
+      }
+      if (r.role === "accountant") {
+        return (
+          pathname.startsWith("/dashboard/accountant") ||
+          pathname.startsWith("/dashboard/dues")
+        );
+      }
+      if (r.href === "/dashboard") return pathname === "/dashboard";
+      return pathname.startsWith(r.href);
+    }) ||
+    DEMO_ROLES.find((r) => r.role === "branch_admin") ||
+    DEMO_ROLES[0];
 
   return (
     <div className="flex items-center gap-2">

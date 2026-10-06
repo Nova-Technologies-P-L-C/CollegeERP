@@ -51,23 +51,34 @@ interface UserRow {
   email: string;
   role: Role;
   createdAt: string;
+  admin?: { adminType?: string } | null;
   student: {
     rollNo: string;
     department: string;
+    discipline?: string | null;
+    programLevel?: string | null;
     semester?: number;
+    part?: number;
     approvedBy?: string | null;
     enrollmentDate?: string;
   } | null;
   faculty: { department: string } | null;
 }
 
-const roleBadgeClass: Record<Role, string> = {
-  ADMIN: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-  FACULTY:
-    "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
-  STUDENT:
-    "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
-};
+function getUserDisplayRole(user: UserRow) {
+  if (user.role === "ADMIN") {
+    const aType = user.admin?.adminType;
+    if (aType === "REGISTRAR") return { label: "Registrar", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" };
+    if (aType === "ACCOUNTANT") return { label: "Accountant", color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" };
+    if (aType === "PLATFORM_ADMIN") return { label: "Platform Admin", color: "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400" };
+    if (aType === "ORG_ADMIN") return { label: "Org Admin", color: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400" };
+    return { label: "Branch Admin", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" };
+  }
+  if (user.role === "FACULTY") {
+    return { label: "Faculty", color: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400" };
+  }
+  return { label: "Student", color: "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400" };
+}
 
 function AvatarCircle({ name, role }: { name: string | null; role: Role }) {
   const initials = (name ?? "?")
@@ -180,8 +191,8 @@ export function UserManagementClient() {
       className="space-y-6"
     >
       <PageHeader
-        title="User Management"
-        subtitle="View all registered users with clean search, role, department, and semester filters"
+        title={programLevel === "INTERMEDIATE" ? "Intermediate (HSSC) User Management" : "BS Programs User Management"}
+        subtitle={`View registered users with clean search, role, ${programLevel === "INTERMEDIATE" ? "discipline, and part" : "department, and semester"} filters`}
         breadcrumbs={[
           { label: "Dashboard", href: "/dashboard" },
           { label: "User Management" },
@@ -339,7 +350,7 @@ export function UserManagementClient() {
                     Role
                   </th>
                   <th className="text-left py-3 px-3 font-semibold text-foreground hidden md:table-cell">
-                    Department & Semester / Roll
+                    {programLevel === "INTERMEDIATE" ? "Discipline & Part / Roll" : "Department & Semester / Roll"}
                   </th>
                   <th className="text-center py-3 px-3 font-semibold text-foreground hidden lg:table-cell">
                     Joined Date
@@ -368,8 +379,13 @@ export function UserManagementClient() {
                   </tr>
                 ) : (
                   users.map((user, idx) => {
-                    const deptName = user.student?.department ?? user.faculty?.department ?? "N/A";
-                    const semVal = user.student?.semester ? `Sem ${user.student.semester}` : null;
+                    const isInter = programLevel === "INTERMEDIATE" || user.student?.programLevel === "INTERMEDIATE";
+                    const deptName = isInter
+                      ? (user.student?.discipline || user.student?.department || user.faculty?.department || "N/A")
+                      : (user.student?.department || user.faculty?.department || "N/A");
+                    const semVal = isInter
+                      ? (user.student?.part ? `Part ${user.student.part}` : (user.student?.semester ? `Part ${user.student.semester}` : null))
+                      : (user.student?.semester ? `Sem ${user.student.semester}` : null);
                     const rollNo = user.student?.rollNo;
 
                     return (
@@ -397,12 +413,17 @@ export function UserManagementClient() {
 
                         {/* Role badge */}
                         <td className="text-center py-3 px-3">
-                          <Badge
-                            variant="secondary"
-                            className={roleBadgeClass[user.role]}
-                          >
-                            {user.role}
-                          </Badge>
+                          {(() => {
+                            const disp = getUserDisplayRole(user);
+                            return (
+                              <Badge
+                                variant="secondary"
+                                className={disp.color}
+                              >
+                                {disp.label}
+                              </Badge>
+                            );
+                          })()}
                         </td>
 
                         {/* Department / Semester / Roll */}
@@ -498,7 +519,7 @@ export function UserManagementClient() {
 
               <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 dark:bg-rose-950/30 dark:border-rose-900/50">
                 <p className="text-xs text-rose-700 dark:text-rose-400 font-medium">
-                  WARNING: This action is permanent. Deleting this user will immediately remove their account from Clerk, clear their Postgres record, and delete all associated student/faculty data.
+                  WARNING: This action is permanent. Deleting this user will immediately remove their account, clear their record, and delete all associated student/faculty data.
                 </p>
               </div>
             </div>

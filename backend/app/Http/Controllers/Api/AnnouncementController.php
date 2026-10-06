@@ -29,8 +29,44 @@ class AnnouncementController extends Controller
 
         $query->whereIn('audience', $allowedAudiences);
 
-        if ($level = $request->query('programLevel')) {
-            $query->where('programLevel', $level);
+        $level = $request->query('programLevel');
+        if ($user->role === 'STUDENT') {
+            $student = $user->student;
+            $studentLevel = $student?->programLevel ?? $level ?? 'BS';
+            if ($studentLevel === 'INTERMEDIATE') {
+                $query->where('programLevel', 'INTERMEDIATE');
+            } else {
+                $query->where(function ($q) {
+                    $q->where('programLevel', 'BS')
+                      ->orWhereNull('programLevel');
+                });
+            }
+
+            if ($student) {
+                $query->where(function ($q) use ($student) {
+                    $q->whereNull('targetDepartment')
+                      ->orWhere('targetDepartment', '')
+                      ->orWhere('targetDepartment', $student->department)
+                      ->orWhere('targetDepartment', $student->discipline);
+                });
+                $sem = $student->part ?: $student->semester;
+                if ($sem) {
+                    $query->where(function ($q) use ($sem, $student) {
+                        $q->whereNull('targetSemester')
+                          ->orWhere('targetSemester', $student->semester)
+                          ->orWhere('targetSemester', $student->part);
+                    });
+                }
+            }
+        } elseif ($level) {
+            if ($level === 'INTERMEDIATE') {
+                $query->where('programLevel', 'INTERMEDIATE');
+            } else {
+                $query->where(function ($q) {
+                    $q->where('programLevel', 'BS')
+                      ->orWhereNull('programLevel');
+                });
+            }
         }
 
         if ($aud = $request->query('audience')) {

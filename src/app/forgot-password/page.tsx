@@ -14,7 +14,6 @@ import {
   AlertCircle,
   Mail,
   KeyRound,
-  RefreshCw,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/dashboard/ThemeToggle";
 import { motion, AnimatePresence } from "framer-motion";
@@ -40,7 +39,6 @@ export default function ForgotPasswordPage() {
   // Form states
   const [step, setStep] = useState<ResetStep>("email");
   const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
@@ -48,7 +46,6 @@ export default function ForgotPasswordPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [resending, setResending] = useState(false);
   const [error, setError] = useState("");
   const [infoMessage, setInfoMessage] = useState("");
 
@@ -100,8 +97,8 @@ export default function ForgotPasswordPage() {
       } else {
         setError(res.error || "Failed to reset password. Please check your email.");
       }
-    } catch (err: any) {
-      setError(err?.message || "Failed to reset password. Please try again.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to reset password. Please try again.");
     } finally {
       setLoading(false);
     }

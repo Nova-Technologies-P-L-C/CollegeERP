@@ -27,6 +27,7 @@ interface AuditLogEntry {
   description: string;
   adminId: string;
   adminName: string;
+  programLevel?: string;
   createdAt: string;
 }
 
@@ -66,6 +67,12 @@ export default function AuditLogPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterEntity, setFilterEntity] = useState<string>("all");
   const [filterAction, setFilterAction] = useState<string>("all");
+
+  useEffect(() => {
+    setFilterEntity("all");
+    setFilterAction("all");
+    setSearchQuery("");
+  }, [programLevel]);
 
   const loadLogs = useCallback(async () => {
     setLoading(true);
@@ -119,8 +126,8 @@ export default function AuditLogPage() {
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
       <PageHeader
-        title="Audit Trail"
-        subtitle={`${logs.length} actions logged — Full transparency for all admin operations`}
+        title={programLevel === "INTERMEDIATE" ? "Intermediate (HSSC) Audit Trail" : "BS Programs Audit Trail"}
+        subtitle={`${logs.length} actions logged — Full transparency for ${programLevel === "INTERMEDIATE" ? "Intermediate (HSSC)" : "BS Programs"} operations`}
         breadcrumbs={[{ label: "Dashboard", href: "/dashboard" }, { label: "Audit Trail" }]}
         action={
           <Button variant="outline" size="sm" onClick={loadLogs}>
@@ -198,6 +205,9 @@ export default function AuditLogPage() {
                       <div className="flex items-center gap-2 flex-wrap mb-1">
                         <Badge variant="outline" className="text-[10px] font-semibold px-2 py-0.5 border-brand-primary/30 text-brand-primary">
                           {log.entity ?? "System"}
+                        </Badge>
+                        <Badge variant="secondary" className="text-[9px] px-1.5 py-0 font-medium">
+                          {log.programLevel === "INTERMEDIATE" ? "Intermediate (HSSC)" : "BS Program"}
                         </Badge>
                         <span className="text-xs text-muted-foreground">
                           by <span className="font-bold text-foreground">{log.adminName || "System / Admin"}</span>

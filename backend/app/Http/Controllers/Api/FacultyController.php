@@ -201,9 +201,152 @@ class FacultyController extends Controller
                 ];
             });
 
-            return response()->json($facultyStatusList);
+            return response()->json([
+                'faculty' => $facultyStatusList,
+            ]);
         }
 
         return response()->json(['error' => 'Forbidden'], 403);
     }
+
+    public function recordAttendance(Request $request)
+    {
+        $user = $request->attributes->get('user') ?? auth()->user();
+        if (!$user) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $faculty = $user->faculty ?: Faculty::where('userId', $user->id)->first();
+        if (!$faculty) {
+            // If admin or test user without direct faculty link, pick first faculty profile
+            $faculty = Faculty::first();
+            if (!$faculty) {
+                return response()->json(['error' => 'No faculty record found to record attendance.'], 404);
+            }
+        }
+
+        $action = $request->input('action', 'CHECK_IN');
+        $today = Carbon::today();
+
+        if ($action === 'CHECK_IN') {
+            $record = FacultyAttendance::updateOrCreate(
+                [
+                    'facultyId' => $faculty->id,
+                    'date' => $today,
+                ],
+                [
+                    'status' => 'Present',
+                    'checkInTime' => Carbon::now(),
+                    'markedBy' => 'SELF',
+                ]
+            );
+        } else {
+            $record = FacultyAttendance::where('facultyId', $faculty->id)
+                ->whereDate('date', $today)
+                ->first();
+
+            if ($record) {
+                $record->checkOutTime = Carbon::now();
+                $record->save();
+            } else {
+                $record = FacultyAttendance::create([
+                    'facultyId' => $faculty->id,
+                    'date' => $today,
+                    'status' => 'Present',
+                    'checkOutTime' => Carbon::now(),
+                    'markedBy' => 'SELF',
+                ]);
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'record' => $record,
+        ]);
+    }
+
+    public function attendanceHistory(Request $request)
+    {
+        $facultyId = $request->query('facultyId');
+        if (!$facultyId) {
+            $user = $request->attributes->get('user') ?? auth()->user();
+            $facultyId = $user?->faculty?->id;
+        }
+
+        if (!$facultyId) {
+            $firstFac = Faculty::first();
+            $facultyId = $firstFac?->id;
+        }
+
+        if (!$facultyId) {
+            return response()->json([]);
+        }
+
+        $records = FacultyAttendance::where('facultyId', $facultyId)
+            ->orderBy('date', 'desc')
+            ->limit(90)
+            ->get();
+
+        $formatted = $records->map(function ($r) {
+            return [
+                'id' => $r->id,
+                'date' => $r->date ? $r->date->format('Y-m-d') : null,
+                'status' => $r->status,
+                'checkInTime' => $r->checkInTime ? $r->checkInTime->format('H:i') : null,
+                'checkOutTime' => $r->checkOutTime ? $r->checkOutTime->format('H:i') : null,
+            ];
+        });
+
+        return response()->json($formatted);
+    }
+
+    public function overrideAttendance(Request $request)
+    {
+        $admin = $request->attributes->get('user') ?? auth()->user();
+
+        $validated = $request->validate([
+            'facultyId' => 'required|string',
+            'status' => 'required|in:Present,Absent,Late,Leave,On_Duty',
+            'date' => 'nullable|string',
+            'notes' => 'nullable|string',
+        ]);
+
+        $faculty = Faculty::with('user')->find($validated['facultyId']);
+        if (!$faculty) {
+            return response()->json(['error' => 'Faculty member not found'], 404);
+        }
+
+        $targetDate = !empty($validated['date'])
+            ? Carbon::parse($validated['date'])->startOfDay()
+            : Carbon::today();
+
+        $record = FacultyAttendance::updateOrCreate(
+            [
+                'facultyId' => $faculty->id,
+                'date' => $targetDate,
+            ],
+            [
+                'status' => $validated['status'],
+                'notes' => $validated['notes'] ?? null,
+                'markedBy' => $admin->id ?? null,
+            ]
+        );
+
+        $facultyName = $faculty->user->name ?? $faculty->id;
+        $dateStr = $targetDate->format('Y-m-d');
+        AuditLogService::log(
+            'UPDATED',
+            'FacultyAttendance',
+            $record->id,
+            "Updated faculty attendance for {$facultyName} on {$dateStr} to {$validated['status']}",
+            $admin->clerkId ?? null,
+            $admin->name ?? null
+        );
+
+        return response()->json([
+            'success' => true,
+            'record' => $record,
+        ]);
+    }
 }
+

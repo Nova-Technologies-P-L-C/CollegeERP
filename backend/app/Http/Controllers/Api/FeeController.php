@@ -66,22 +66,77 @@ class FeeController extends Controller
         $dueDate = Carbon::parse($validated['dueDate']);
 
         if (!empty($validated['isBulk'])) {
-            $students = Student::where('department', $validated['department'])
-                ->where('shift', $validated['shift'])
-                ->where('semester', $validated['semester'])
-                ->where('status', 'Active')
-                ->get();
+            $studentQuery = Student::where('status', 'Active');
+            $dept = $validated['department'] ?? '';
+            $sem = (int) ($validated['semester'] ?? 1);
+            $programLevel = $request->input('programLevel');
+
+            if ($programLevel === 'INTERMEDIATE') {
+                $normDept = $dept;
+                if (str_contains($dept, 'I.Com')) $normDept = 'I.Com';
+                elseif (str_contains($dept, 'ICS')) $normDept = 'ICS';
+                elseif (str_contains($dept, 'Pre-Engineering')) $normDept = 'F.Sc Pre-Engineering';
+                elseif (str_contains($dept, 'Pre-Medical')) $normDept = 'F.Sc Pre-Medical';
+                elseif (str_contains($dept, 'Home Economics')) $normDept = 'Home Economics';
+                elseif (str_contains($dept, 'FA IT')) $normDept = 'FA IT';
+                elseif (str_starts_with($dept, 'FA')) $normDept = 'FA';
+
+                $studentQuery->where('programLevel', 'INTERMEDIATE')
+                    ->where(function ($q) use ($dept, $normDept) {
+                        $q->where('discipline', $dept)
+                          ->orWhere('discipline', $normDept)
+                          ->orWhere('department', $dept)
+                          ->orWhere('department', $normDept)
+                          ->orWhere('discipline', 'like', "{$normDept}%")
+                          ->orWhere('department', 'like', "{$normDept}%");
+                    })
+                    ->where(function ($q) use ($sem) {
+                        $q->where('part', $sem)->orWhere('semester', $sem);
+                    });
+            } else {
+                $studentQuery->where('department', $dept)
+                    ->where('semester', $sem);
+                if (!empty($validated['shift'])) {
+                    $studentQuery->where('shift', $validated['shift']);
+                }
+            }
+
+            $students = $studentQuery->get();
+
+            if ($students->isEmpty()) {
+                $levelLabel = $programLevel === 'INTERMEDIATE' ? "Part {$sem}" : "Semester {$sem}";
+                $shiftLabel = (!empty($validated['shift']) && $programLevel !== 'INTERMEDIATE') ? " ({$validated['shift']} Shift)" : "";
+                return response()->json([
+                    'error' => "No active students found in {$dept} {$levelLabel}{$shiftLabel} to assign dues."
+                ], 422);
+            }
 
             $created = [];
             foreach ($students as $s) {
-                $created[] = Fee::create([
-                    'studentId' => $s->id,
-                    'type' => $validated['type'],
-                    'amount' => $validated['amount'],
-                    'dueDate' => $dueDate,
-                    'semester' => $validated['semester'],
-                    'status' => 'Unpaid',
-                ]);
+                // Prevent duplicate assignment of identical unpaid fee for this semester
+                $existing = Fee::where('studentId', $s->id)
+                    ->where('type', $validated['type'])
+                    ->where('semester', $validated['semester'])
+                    ->where('status', 'Unpaid')
+                    ->first();
+
+                if (!$existing) {
+                    $created[] = Fee::create([
+                        'studentId' => $s->id,
+                        'type' => $validated['type'],
+                        'amount' => $validated['amount'],
+                        'dueDate' => $dueDate,
+                        'semester' => $validated['semester'],
+                        'status' => 'Unpaid',
+                    ]);
+                }
+            }
+
+            if (empty($created)) {
+                return response()->json([
+                    'message' => 'All active students in this class already have this unpaid fee assigned.',
+                    'count' => 0
+                ], 200);
             }
 
             AuditLogService::log(
@@ -90,10 +145,14 @@ class FeeController extends Controller
                 'bulk',
                 "Bulk assigned {$validated['type']} fee of {$validated['amount']} to " . count($created) . " students",
                 $admin->clerkId ?? null,
-                $admin->name ?? null
+                $admin->name ?? null,
+                $programLevel === 'INTERMEDIATE' ? 'INTERMEDIATE' : 'BS'
             );
 
-            return response()->json(['message' => 'Fees assigned successfully', 'count' => count($created)], 201);
+            return response()->json([
+                'message' => 'Fees assigned successfully',
+                'count' => count($created)
+            ], 201);
         }
 
         $fee = Fee::create([

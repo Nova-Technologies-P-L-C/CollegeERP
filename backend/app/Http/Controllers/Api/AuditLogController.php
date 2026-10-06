@@ -13,19 +13,34 @@ class AuditLogController extends Controller
         $query = AuditLog::query();
 
         if ($entity = $request->query('entity')) {
-            $query->where('entity', $entity);
+            if ($entity !== 'all' && $entity !== 'ALL') {
+                $query->where('entity', $entity);
+            }
         }
 
         if ($entityId = $request->query('entityId')) {
             $query->where('entityId', $entityId);
         }
 
-        $programLevel = $request->query('programLevel', 'BS');
-        if ($programLevel !== 'ALL') {
-            $query->where('programLevel', $programLevel === 'INTERMEDIATE' ? 'INTERMEDIATE' : 'BS');
+        if ($action = $request->query('action')) {
+            if ($action !== 'all' && $action !== 'ALL') {
+                $query->where('action', $action);
+            }
         }
 
-        $logs = $query->orderBy('createdAt', 'desc')->limit(100)->get();
+        $programLevel = $request->query('programLevel', 'BS');
+        if ($programLevel !== 'ALL') {
+            if ($programLevel === 'INTERMEDIATE') {
+                $query->where('programLevel', 'INTERMEDIATE');
+            } else {
+                $query->where(function ($q) {
+                    $q->where('programLevel', 'BS')
+                      ->orWhereNull('programLevel');
+                });
+            }
+        }
+
+        $logs = $query->orderBy('createdAt', 'desc')->limit(200)->get();
 
         return response()->json($logs);
     }

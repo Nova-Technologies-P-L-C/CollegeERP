@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, useMemo } from "react";
+import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/axios";
 import {
@@ -11,8 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Button } from "@/components/ui/button";
-import { LogOut, User as UserIcon } from "lucide-react";
+import { LogOut } from "lucide-react";
 
 export interface SanctumUser {
   id: string;
@@ -20,9 +19,9 @@ export interface SanctumUser {
   name: string;
   role: "ADMIN" | "FACULTY" | "STUDENT";
   avatar?: string | null;
-  student?: any;
-  faculty?: any;
-  admin?: any;
+  student?: Record<string, unknown> | null;
+  faculty?: Record<string, unknown> | null;
+  admin?: { adminType?: string; [key: string]: unknown } | null;
   // Clerk compatibility fields
   fullName: string;
   firstName: string;
@@ -30,6 +29,7 @@ export interface SanctumUser {
   primaryEmailAddress: { emailAddress: string };
   publicMetadata: { role: string };
   imageUrl?: string;
+  [key: string]: unknown;
 }
 
 interface SanctumAuthContextType {
@@ -46,26 +46,41 @@ interface SanctumAuthContextType {
 
 const SanctumAuthContext = createContext<SanctumAuthContextType | undefined>(undefined);
 
-function mapRawUser(u: any): SanctumUser {
-  const name = u.name || (u.email ? u.email.split("@")[0] : "User");
+function mapRawUser(u: Record<string, unknown>): SanctumUser {
+  const email = (u.email as string) || "";
+  const name = (u.name as string) || (email ? email.split("@")[0] : "User");
   const nameParts = name.trim().split(/\s+/);
   const firstName = nameParts[0] || name;
   const lastName = nameParts.slice(1).join(" ") || "";
-  const role = (u.role || "STUDENT").toUpperCase() as "ADMIN" | "FACULTY" | "STUDENT";
+  const role = (((u.role as string) || "STUDENT").toUpperCase()) as "ADMIN" | "FACULTY" | "STUDENT";
+  const adminObj = u.admin as { adminType?: string; [key: string]: unknown } | undefined;
+
+  let effectiveRole = role.toLowerCase();
+  if (role === "ADMIN" && adminObj?.adminType) {
+    const aType = adminObj.adminType;
+    if (aType === "PLATFORM_ADMIN") effectiveRole = "platform_admin";
+    else if (aType === "ORG_ADMIN") effectiveRole = "org_admin";
+    else if (aType === "REGISTRAR") effectiveRole = "registrar";
+    else if (aType === "ACCOUNTANT") effectiveRole = "accountant";
+    else effectiveRole = "admin";
+  }
 
   return {
     ...u,
-    id: u.id,
-    email: u.email,
+    id: (u.id as string) || "",
+    email,
     name,
     role,
-    avatar: u.avatar || null,
+    avatar: (u.avatar as string) || null,
+    student: (u.student as Record<string, unknown>) || null,
+    faculty: (u.faculty as Record<string, unknown>) || null,
+    admin: adminObj || null,
     fullName: name,
     firstName,
     lastName,
-    primaryEmailAddress: { emailAddress: u.email },
-    publicMetadata: { role: role.toLowerCase() },
-    imageUrl: u.avatar || undefined,
+    primaryEmailAddress: { emailAddress: email },
+    publicMetadata: { role: effectiveRole },
+    imageUrl: (u.avatar as string) || undefined,
   };
 }
 
@@ -75,7 +90,7 @@ export function SanctumAuthProvider({ children }: { children: React.ReactNode })
   const [isLoaded, setIsLoaded] = useState(false);
   const router = useRouter();
 
-  const fetchProfile = async () => {
+  const fetchProfile = useCallback(async () => {
     const savedToken = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
     if (!savedToken) {
       setUser(null);
@@ -100,13 +115,13 @@ export function SanctumAuthProvider({ children }: { children: React.ReactNode })
     } finally {
       setIsLoaded(true);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchProfile();
-  }, []);
+  }, [fetchProfile]);
 
-  const login = async (email: string, password: string) => {
+  const login = useCallback(async (email: string, password: string) => {
     try {
       const res = await api.post("/api/login", { email, password });
       const { token: receivedToken, user: rawUser } = res.data;
@@ -119,31 +134,36 @@ export function SanctumAuthProvider({ children }: { children: React.ReactNode })
       const mapped = mapRawUser(rawUser);
       setUser(mapped);
       return { success: true };
-    } catch (err: any) {
-      const msg = err.response?.data?.error || err.response?.data?.message || "Invalid email or password";
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string; message?: string } } };
+      const msg = axiosErr.response?.data?.error || axiosErr.response?.data?.message || "Invalid email or password";
       return { success: false, error: msg };
     }
-  };
+  }, []);
 
-  const register = async (data: any) => {
-    try {
-      const res = await api.post("/api/register", data);
-      const { token: receivedToken, user: rawUser } = res.data;
+  const register = useCallback(
+    async (data: { name: string; email: string; password: string; role?: string; department?: string; phone?: string }) => {
+      try {
+        const res = await api.post("/api/register", data);
+        const { token: receivedToken, user: rawUser } = res.data;
 
-      localStorage.setItem("auth_token", receivedToken);
-      document.cookie = `auth_token=${receivedToken}; path=/; max-age=2592000; SameSite=Lax`;
+        localStorage.setItem("auth_token", receivedToken);
+        document.cookie = `auth_token=${receivedToken}; path=/; max-age=2592000; SameSite=Lax`;
 
-      setToken(receivedToken);
-      const mapped = mapRawUser(rawUser);
-      setUser(mapped);
-      return { success: true };
-    } catch (err: any) {
-      const msg = err.response?.data?.error || err.response?.data?.message || "Registration failed";
-      return { success: false, error: msg };
-    }
-  };
+        setToken(receivedToken);
+        const mapped = mapRawUser(rawUser);
+        setUser(mapped);
+        return { success: true };
+      } catch (err: unknown) {
+        const axiosErr = err as { response?: { data?: { error?: string; message?: string } } };
+        const msg = axiosErr.response?.data?.error || axiosErr.response?.data?.message || "Registration failed";
+        return { success: false, error: msg };
+      }
+    },
+    []
+  );
 
-  const resetPassword = async (email: string, password: string) => {
+  const resetPassword = useCallback(async (email: string, password: string) => {
     try {
       const res = await api.post("/api/reset-password", { email, password });
       const { token: receivedToken, user: rawUser } = res.data;
@@ -157,13 +177,14 @@ export function SanctumAuthProvider({ children }: { children: React.ReactNode })
         setUser(mapRawUser(rawUser));
       }
       return { success: true };
-    } catch (err: any) {
-      const msg = err.response?.data?.error || err.response?.data?.message || "Password reset failed";
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string; message?: string } } };
+      const msg = axiosErr.response?.data?.error || axiosErr.response?.data?.message || "Password reset failed";
       return { success: false, error: msg };
     }
-  };
+  }, []);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
       await api.post("/api/logout");
     } catch {
@@ -174,7 +195,7 @@ export function SanctumAuthProvider({ children }: { children: React.ReactNode })
     setUser(null);
     setToken(null);
     router.push("/sign-in");
-  };
+  }, [router]);
 
   const value = useMemo(
     () => ({
@@ -188,7 +209,7 @@ export function SanctumAuthProvider({ children }: { children: React.ReactNode })
       logout,
       refreshUser: fetchProfile,
     }),
-    [user, token, isLoaded]
+    [user, token, isLoaded, login, register, resetPassword, logout, fetchProfile]
   );
 
   return <SanctumAuthContext.Provider value={value}>{children}</SanctumAuthContext.Provider>;
@@ -235,7 +256,7 @@ export function UserButton({
   afterSignOutUrl = "/sign-in",
 }: {
   afterSignOutUrl?: string;
-  appearance?: any;
+  appearance?: Record<string, unknown>;
 }) {
   const { user, logout } = useSanctumAuth();
   const router = useRouter();
@@ -287,6 +308,6 @@ export function UserButton({
   );
 }
 
-export function ClerkProvider({ children }: { children: React.ReactNode; [key: string]: any }) {
+export function ClerkProvider({ children }: { children: React.ReactNode; [key: string]: unknown }) {
   return <SanctumAuthProvider>{children}</SanctumAuthProvider>;
 }

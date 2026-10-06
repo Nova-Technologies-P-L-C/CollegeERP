@@ -56,7 +56,9 @@ interface ApiQuiz {
   totalMarks: number;
   status: "Draft" | "Published" | "Closed";
   dueDate: string;
-  _count: { questions: number; attempts: number };
+  _count?: { questions?: number; attempts?: number };
+  questions_count?: number;
+  attempts_count?: number;
   course: { courseCode: string; courseName: string };
 }
 
@@ -307,14 +309,14 @@ export default function ManageQuizzesPage() {
                   <Badge variant="secondary" className={statusColors[quiz.status]}>{quiz.status}</Badge>
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {quiz.course?.courseCode} • {quiz._count.questions} questions • {quiz.duration} mins • {quiz.totalMarks} marks
+                  {quiz.course?.courseCode} • {quiz._count?.questions ?? quiz.questions_count ?? 0} questions • {quiz.duration} mins • {quiz.totalMarks} marks
                 </p>
                 <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
                   <span className="flex items-center gap-1">
                     <Clock className="h-3 w-3" /> Due: {new Date(quiz.dueDate).toLocaleDateString()}
                   </span>
                   <span className="flex items-center gap-1">
-                    <Users className="h-3 w-3" /> {quiz._count.attempts} attempted
+                    <Users className="h-3 w-3" /> {quiz._count?.attempts ?? quiz.attempts_count ?? 0} attempted
                   </span>
                   <AuditBadgeInline entity="Quiz" entityId={quiz.id} />
                 </div>

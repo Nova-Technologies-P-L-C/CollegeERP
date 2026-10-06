@@ -11,14 +11,42 @@ class FeedbackController extends Controller
 {
     public function index(Request $request)
     {
+        $user = $request->attributes->get('user') ?? auth()->user();
         $query = Feedback::with('student.user:id,name,email');
+
+        if ($user && $user->role === 'STUDENT') {
+            $studentId = $user->student?->id;
+            if (!$studentId) {
+                return response()->json([]);
+            }
+            $query->where('studentId', $studentId);
+        } else {
+            if ($user && $user->role === 'FACULTY' && $user->faculty) {
+                if ($targetId = $request->query('targetId')) {
+                    $query->where('targetId', $targetId);
+                } else {
+                    $query->where('targetId', $user->faculty->id);
+                }
+            } elseif ($targetId = $request->query('targetId')) {
+                $query->where('targetId', $targetId);
+            }
+
+            if ($level = $request->query('programLevel')) {
+                if ($level === 'INTERMEDIATE') {
+                    $query->whereHas('student', function ($sq) {
+                        $sq->where('programLevel', 'INTERMEDIATE');
+                    });
+                } else {
+                    $query->whereHas('student', function ($sq) {
+                        $sq->where('programLevel', 'BS')
+                          ->orWhereNull('programLevel');
+                    });
+                }
+            }
+        }
 
         if ($type = $request->query('type')) {
             $query->where('type', $type);
-        }
-
-        if ($targetId = $request->query('targetId')) {
-            $query->where('targetId', $targetId);
         }
 
         $feedbacks = $query->orderBy('date', 'desc')->get();

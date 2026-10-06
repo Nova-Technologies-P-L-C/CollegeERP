@@ -45,6 +45,9 @@ interface StudentWithUser {
   phone: string | null;
   department: string;
   semester: number;
+  programLevel?: "BS" | "INTERMEDIATE";
+  discipline?: string | null;
+  part?: number | null;
   enrollmentDate: string;
   avatar: string | null;
   shift: string;
@@ -56,6 +59,7 @@ interface StudentWithUser {
   user: { name: string | null; email: string };
   _count: { enrollments: number };
 }
+
 
 const deptColors: Record<string, string> = {
   English: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
@@ -142,7 +146,7 @@ export default function ManageStudentsPage() {
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    setSelectedDept(programLevel === "INTERMEDIATE" ? "F.Sc Pre-Medical" : "Computer Science");
+    setSelectedDept(programLevel === "INTERMEDIATE" ? "F.Sc Pre-Engineering" : "Computer Science");
     setSelectedSemester(1);
   }, [programLevel]);
 
@@ -276,7 +280,7 @@ export default function ManageStudentsPage() {
 
   useEffect(() => {
     if (isLoaded && isAdmin) {
-      if (!selectedDept) setSelectedDept(programLevel === "INTERMEDIATE" ? "F.Sc Pre-Medical" : "Computer Science");
+      if (!selectedDept) setSelectedDept(programLevel === "INTERMEDIATE" ? "F.Sc Pre-Engineering" : "Computer Science");
       if (!selectedSemester) setSelectedSemester(1);
     }
   }, [isLoaded, isAdmin, selectedDept, selectedSemester, programLevel]);
@@ -1141,20 +1145,36 @@ export default function ManageStudentsPage() {
                 <div className="w-full space-y-2 pt-3 border-t border-white/20 text-left text-xs text-white/90">
                   <div>
                     <p className="text-white/60 text-[10px] uppercase font-bold tracking-wider">
-                      {programLevel === "INTERMEDIATE" ? "Discipline" : "Department"}
+                      {programLevel === "INTERMEDIATE" || detailStudent.programLevel === "INTERMEDIATE" ? "Discipline" : "Department"}
                     </p>
-                    <p className="font-semibold text-white truncate">{detailStudent.department}</p>
+                    <p className="font-semibold text-white truncate">
+                      {programLevel === "INTERMEDIATE" || detailStudent.programLevel === "INTERMEDIATE"
+                        ? (detailStudent.discipline || detailStudent.department)
+                        : detailStudent.department}
+                    </p>
                   </div>
                   <div>
                     <p className="text-white/60 text-[10px] uppercase font-bold tracking-wider">
-                      {programLevel === "INTERMEDIATE" ? "Part" : "Semester & Shift"}
+                      {programLevel === "INTERMEDIATE" || detailStudent.programLevel === "INTERMEDIATE" ? "Part" : "Semester"}
                     </p>
                     <p className="font-semibold text-white">
-                      {programLevel === "INTERMEDIATE"
-                        ? formatTermLabel("INTERMEDIATE", detailStudent.semester)
-                        : `Semester ${detailStudent.semester} (${detailStudent.shift ?? "Morning"})`}
+                      {programLevel === "INTERMEDIATE" || detailStudent.programLevel === "INTERMEDIATE"
+                        ? formatTermLabel("INTERMEDIATE", detailStudent.part || detailStudent.semester)
+                        : `Semester ${detailStudent.semester}`}
                     </p>
                   </div>
+                  {!(programLevel === "INTERMEDIATE" || detailStudent.programLevel === "INTERMEDIATE") && detailStudent.shift && (
+                    <div>
+                      <p className="text-white/60 text-[10px] uppercase font-bold tracking-wider">Shift</p>
+                      <p className="font-semibold text-white">{detailStudent.shift}</p>
+                    </div>
+                  )}
+                  {(programLevel === "INTERMEDIATE" || detailStudent.programLevel === "INTERMEDIATE") && detailStudent.subjectSet && (
+                    <div>
+                      <p className="text-white/60 text-[10px] uppercase font-bold tracking-wider">Subject Set</p>
+                      <p className="font-semibold text-white">{detailStudent.subjectSet}</p>
+                    </div>
+                  )}
                   {detailStudent.phone && (
                     <div>
                       <p className="text-white/60 text-[10px] uppercase font-bold tracking-wider">Phone</p>
@@ -1168,6 +1188,7 @@ export default function ManageStudentsPage() {
                     </div>
                   )}
                 </div>
+
               </div>
 
               {/* Right Column: Dynamic & Institutional Details */}

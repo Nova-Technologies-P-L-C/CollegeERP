@@ -13,7 +13,7 @@ class Admission extends BaseModel
         'totalMarks' => 'float',
         'semester' => 'integer',
         'part' => 'integer',
-        'selectedCourses' => 'array',
+        'selectedCourses' => \App\Casts\PgArray::class,
         'blocked' => 'boolean',
     ];
 }

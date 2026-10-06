@@ -16,6 +16,8 @@ import {
   PenTool,
   User,
   Shield,
+  ShieldCheck,
+  Building2,
   UserCheck,
   UserX,
 } from "lucide-react";
@@ -28,9 +30,10 @@ export interface NavItem {
   badge?: number;
 }
 
+// ── Branch Admin (Client Campus Admin - Branch A): Full operational control ──
 const adminNav: NavItem[] = [
   { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { title: "Executive Oversight", href: "/dashboard/org-admin", icon: BarChart3 },
+  { title: "Manage Sub-Branches", href: "/dashboard/branches", icon: Building2 },
   { title: "Manage Students", href: "/dashboard/students", icon: Users },
   { title: "Dropped Students", href: "/dashboard/left-students", icon: UserX },
   { title: "Alumni Directory", href: "/dashboard/alumni", icon: GraduationCap },
@@ -47,6 +50,39 @@ const adminNav: NavItem[] = [
   { title: "Feedback", href: "/dashboard/feedback", icon: MessageCircle },
   { title: "Audit Trail", href: "/dashboard/audit", icon: Shield },
   { title: "User Management", href: "/dashboard/users", icon: Users2 },
+  { title: "Settings", href: "/dashboard/settings", icon: Settings },
+];
+
+// ── Organizational Admin (Executive / Board Oversight): Purely Read-Only Analytics & Graphs ──
+const orgAdminNav: NavItem[] = [
+  { title: "Executive Oversight", href: "/dashboard/org-admin", icon: BarChart3 },
+  { title: "Branch Performance", href: "/dashboard/org-admin#branch-analytics", icon: Building2 },
+  { title: "Alumni Directory", href: "/dashboard/alumni", icon: GraduationCap },
+  { title: "Announcements", href: "/dashboard/announcements", icon: MessageSquare },
+  { title: "Feedback Analytics", href: "/dashboard/feedback", icon: MessageCircle },
+  { title: "Settings", href: "/dashboard/settings", icon: Settings },
+];
+
+// ── Platform Admin (Nova Technology - "We"): ERP Vendor & License Approvals ──
+const platformAdminNav: NavItem[] = [
+  { title: "Platform Overview", href: "/dashboard/platform-admin", icon: LayoutDashboard },
+  { title: "Client Campuses", href: "/dashboard/platform-admin#licenses", icon: Building2 },
+  { title: "Audit Trail", href: "/dashboard/audit", icon: ShieldCheck },
+  { title: "Settings", href: "/dashboard/settings", icon: Settings },
+];
+
+// ── Academic Registrar Desk: Strictly Student Admissions & Enrolled Registry ──
+const registrarNav: NavItem[] = [
+  { title: "Registrar Desk", href: "/dashboard/registrar", icon: UserPlus },
+  { title: "Admissions Pipeline", href: "/dashboard/admissions", icon: Users },
+  { title: "Manage Students", href: "/dashboard/students", icon: Users2 },
+  { title: "Settings", href: "/dashboard/settings", icon: Settings },
+];
+
+// ── Finance & Accountant Desk: Strictly Fee Clearance & Student Dues ──
+const accountantNav: NavItem[] = [
+  { title: "Accountant Desk", href: "/dashboard/accountant", icon: CreditCard },
+  { title: "Manage Dues", href: "/dashboard/dues", icon: CreditCard },
   { title: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
 
@@ -78,6 +114,14 @@ const studentNav: NavItem[] = [
 
 export function getNavItems(role: UserRole): NavItem[] {
   switch (role) {
+    case "platform_admin":
+      return platformAdminNav;
+    case "org_admin":
+      return orgAdminNav;
+    case "registrar":
+      return registrarNav;
+    case "accountant":
+      return accountantNav;
     case "admin":
       return adminNav;
     case "faculty":
@@ -91,8 +135,16 @@ export function getNavItems(role: UserRole): NavItem[] {
 
 export function getRoleLabel(role: UserRole): string {
   switch (role) {
+    case "platform_admin":
+      return "Platform Admin (Nova Tech)";
+    case "org_admin":
+      return "Organizational Admin";
+    case "registrar":
+      return "Academic Registrar";
+    case "accountant":
+      return "Finance & Accountant";
     case "admin":
-      return "Administrator";
+      return "Branch Admin";
     case "faculty":
       return "Faculty Member";
     case "student":
@@ -101,3 +153,4 @@ export function getRoleLabel(role: UserRole): string {
       return "User";
   }
 }
+

@@ -70,12 +70,16 @@ class AdmissionController extends Controller
             'previousInstitution' => 'required|string',
             'marksObtained' => 'required|numeric',
             'totalMarks' => 'required|numeric',
-            'shift' => 'nullable|string|default:Morning',
-            'semester' => 'nullable|integer|default:1',
-            'part' => 'nullable|integer|default:1',
+            'shift' => 'nullable|string',
+            'semester' => 'nullable|integer',
+            'part' => 'nullable|integer',
             'programLevel' => 'nullable|string|in:BS,INTERMEDIATE',
             'selectedCourses' => 'nullable|array',
         ]);
+
+        $validated['shift'] = $validated['shift'] ?? 'Morning';
+        $validated['semester'] = $validated['semester'] ?? 1;
+        $validated['part'] = $validated['part'] ?? 1;
 
         $isStaff = $user && in_array($user->role, ['ADMIN', 'FACULTY']);
 
@@ -124,7 +128,17 @@ class AdmissionController extends Controller
         ]);
 
         if ($validated['status'] === 'Approved' && $admission->status !== 'Approved') {
-            DB::transaction(function () use ($admission, $validated, $admin) {
+            // Strictly require accountant payment verification before admission approval
+            if (empty($validated['receiptNo']) || empty($validated['paidAmount']) || (float)$validated['paidAmount'] <= 0) {
+                return response()->json([
+                    'error' => 'Cannot approve admission before payment verification. The Accountant must verify payment with a valid receipt number and amount at the Accountant Desk before approval.'
+                ], 422);
+            }
+
+            $createdStudent = null;
+            $generatedRollNo = null;
+
+            DB::transaction(function () use ($admission, $validated, $admin, &$createdStudent, &$generatedRollNo) {
                 $admission->status = 'Approved';
                 $admission->save();
 
@@ -163,10 +177,13 @@ class AdmissionController extends Controller
                     ]);
                 }
 
+                $createdStudent = $student;
+                $generatedRollNo = $student->rollNo;
+
                 // Create Fee record
                 Fee::create([
                     'studentId' => $student->id,
-                    'type' => 'Tuition Fee',
+                    'type' => 'Admission & Tuition Fee',
                     'amount' => $validated['paidAmount'] ?? 25000,
                     'status' => !empty($validated['receiptNo']) ? 'Paid' : 'Unpaid',
                     'dueDate' => Carbon::now()->addDays(30),
@@ -174,18 +191,45 @@ class AdmissionController extends Controller
                     'paidDate' => !empty($validated['receiptNo']) ? Carbon::now() : null,
                 ]);
 
-                // Enroll in semester courses
-                $courses = Course::where('department', $student->department)
-                    ->where('semester', $student->semester)
-                    ->where('programLevel', $student->programLevel)
-                    ->get();
+                // Enroll in semester / part courses
+                $part = $student->part ?: ($student->semester ?: 1);
+
+                if ($student->programLevel === 'INTERMEDIATE') {
+                    $disc = $student->discipline ?: $student->department;
+                    $normDisc = $disc;
+                    if (str_contains($disc, 'I.Com')) $normDisc = 'I.Com';
+                    elseif (str_contains($disc, 'ICS')) $normDisc = 'ICS';
+                    elseif (str_contains($disc, 'Pre-Engineering')) $normDisc = 'F.Sc Pre-Engineering';
+                    elseif (str_contains($disc, 'Pre-Medical')) $normDisc = 'F.Sc Pre-Medical';
+                    elseif (str_contains($disc, 'Home Economics')) $normDisc = 'Home Economics';
+                    elseif (str_contains($disc, 'FA IT')) $normDisc = 'FA IT';
+                    elseif (str_starts_with($disc, 'FA')) $normDisc = 'FA';
+
+                    $courses = Course::where('programLevel', 'INTERMEDIATE')
+                        ->where(function ($q) use ($disc, $normDisc) {
+                            $q->where('discipline', $disc)
+                              ->orWhere('discipline', $normDisc)
+                              ->orWhere('department', $disc)
+                              ->orWhere('department', $normDisc);
+                        })
+                        ->where(function ($q) use ($part) {
+                            $q->where('part', $part)
+                              ->orWhere('semester', $part);
+                        })
+                        ->get();
+                } else {
+                    $courses = Course::where('department', $student->department)
+                        ->where('semester', $student->semester)
+                        ->where('programLevel', 'BS')
+                        ->get();
+                }
 
                 foreach ($courses as $c) {
                     Enrollment::firstOrCreate([
                         'studentId' => $student->id,
                         'courseId' => $c->id,
                     ], [
-                        'semester' => $student->semester,
+                        'semester' => $student->semester ?: 1,
                     ]);
                 }
             });
@@ -194,11 +238,16 @@ class AdmissionController extends Controller
                 'UPDATED',
                 'Admission',
                 $admission->id,
-                "Approved admission for {$admission->studentName}",
+                "Approved admission for {$admission->studentName} (Roll No: {$generatedRollNo})",
                 $admin->clerkId ?? null,
                 $admin->name ?? null,
                 $admission->programLevel ?? 'BS'
             );
+
+            return response()->json(array_merge($admission->toArray(), [
+                'generatedRollNo' => $generatedRollNo,
+                'student' => $createdStudent,
+            ]));
         } else {
             $admission->status = $validated['status'];
             $admission->save();
@@ -212,9 +261,9 @@ class AdmissionController extends Controller
                 $admin->name ?? null,
                 $admission->programLevel ?? 'BS'
             );
-        }
 
-        return response()->json($admission);
+            return response()->json($admission);
+        }
     }
 
     public function destroy(Request $request, string $id)

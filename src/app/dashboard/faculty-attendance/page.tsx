@@ -139,7 +139,8 @@ export default function FacultyAttendancePage() {
         const res = await api.get<{ faculty: FacultyItem[] }>(
           `/api/faculty/attendance?date=${selectedDate}&department=${selectedDept}`
         );
-        setFacultyList(res.data.faculty ?? []);
+        const raw = res.data as { faculty?: FacultyItem[] } | FacultyItem[];
+        setFacultyList(Array.isArray(raw) ? raw : (raw?.faculty ?? []));
       } else if (userRole === "FACULTY") {
         const res = await api.get<{
           todayRecord: FacultyTodayRecord | null;

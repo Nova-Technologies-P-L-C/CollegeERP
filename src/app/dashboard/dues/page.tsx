@@ -72,6 +72,10 @@ interface StudentItem {
   department: string;
   semester: number;
   shift: string;
+  programLevel?: "BS" | "INTERMEDIATE";
+  discipline?: string | null;
+  part?: number | null;
+  subjectSet?: string | null;
   enrollmentDate: string;
   avatar: string | null;
   user: { name: string | null; email: string };
@@ -107,7 +111,7 @@ export default function ManageDuesPage() {
   const [loading, setLoading] = useState(true);
 
   // Drill-down states
-  const [selectedDept, setSelectedDept] = useState<string | null>("Computer Science");
+  const [selectedDept, setSelectedDept] = useState<string | null>(programLevel === "INTERMEDIATE" ? "F.Sc Pre-Engineering" : "Computer Science");
   const [selectedSemester, setSelectedSemester] = useState<number | null>(1);
   const [selectedShift, setSelectedShift] = useState<string>("Morning");
   const [selectedSet, setSelectedSet] = useState<string>("Set 1");
@@ -130,6 +134,7 @@ export default function ManageDuesPage() {
   const [isBulkAssignment, setIsBulkAssignment] = useState(true);
 
   const [mutationError, setMutationError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const [deletingFeeId, setDeletingFeeId] = useState<string | null>(null);
@@ -213,29 +218,43 @@ export default function ManageDuesPage() {
       setMutationError("Please enter amount and due date");
       return;
     }
+    const parsedAmount = parseFloat(newFee.amount);
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      setMutationError("Please enter a valid fee amount greater than 0");
+      return;
+    }
 
     setSubmitting(true);
     try {
       if (isBulkAssignment) {
-        await api.post("/api/fees", {
+        const res = await api.post("/api/fees", {
           isBulk: true,
+          programLevel,
           department: selectedDept,
           semester: selectedSemester,
           shift: selectedShift,
           subjectSet: selectedSet,
           type: newFee.type,
-          amount: parseFloat(newFee.amount),
+          amount: parsedAmount,
           dueDate: new Date(newFee.dueDate).toISOString(),
         });
+        const assignedCount = res.data?.count ?? 0;
+        setSuccessMessage(
+          assignedCount > 0
+            ? `Successfully assigned "${newFee.type}" (Rs. ${parsedAmount.toLocaleString()}) to ${assignedCount} student(s)!`
+            : (res.data?.message || "Fees assigned successfully.")
+        );
       } else {
         await api.post("/api/fees", {
           studentId: newFee.studentId,
           type: newFee.type,
-          amount: parseFloat(newFee.amount),
+          amount: parsedAmount,
           dueDate: new Date(newFee.dueDate).toISOString(),
           semester: selectedSemester,
         });
+        setSuccessMessage(`Successfully assigned "${newFee.type}" fee!`);
       }
+      setTimeout(() => setSuccessMessage(null), 6000);
       setCreateDialogOpen(false);
       setNewFee({
         studentId: "",
@@ -246,8 +265,8 @@ export default function ManageDuesPage() {
       loadData();
       router.refresh();
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { error?: string } } };
-      setMutationError(axiosErr.response?.data?.error ?? "Failed to assign fee");
+      const axiosErr = err as { response?: { data?: { error?: string; message?: string } } };
+      setMutationError(axiosErr.response?.data?.error || axiosErr.response?.data?.message || "Failed to assign fee");
     } finally {
       setSubmitting(false);
     }
@@ -257,16 +276,30 @@ export default function ManageDuesPage() {
   const classStudents = useMemo(() => {
     if (!selectedDept || !selectedSemester) return [];
     return students.filter((s) => {
-      const matchesDept = s.department === selectedDept;
-      const matchesSem = s.semester === selectedSemester;
-      const matchesShift = programLevel === "BS" ? s.shift === selectedShift : true;
-
       if (programLevel === "INTERMEDIATE") {
+        const disc = s.discipline || s.department || "";
+        const matchesDept =
+          s.department === selectedDept ||
+          disc === selectedDept ||
+          disc.startsWith(selectedDept) ||
+          s.department.startsWith(selectedDept) ||
+          (selectedDept === "ICS" && (disc.includes("ICS") || s.department.includes("ICS"))) ||
+          (selectedDept === "I.Com" && (disc.includes("I.Com") || s.department.includes("I.Com"))) ||
+          (selectedDept === "F.Sc Pre-Engineering" && (disc.includes("Pre-Engineering") || s.department.includes("Pre-Engineering"))) ||
+          (selectedDept === "F.Sc Pre-Medical" && (disc.includes("Pre-Medical") || s.department.includes("Pre-Medical")));
+
+        const matchesSem = s.part === selectedSemester || s.semester === selectedSemester;
+
         const setConfig = getSubjectSetFilterConfig(selectedDept || "");
         const activeSet = setConfig.hasMultipleSets ? (selectedSet || "Set 1") : "Set 1";
-        const matchesSet = !(s as { subjectSet?: string }).subjectSet || (s as { subjectSet?: string }).subjectSet?.toLowerCase() === activeSet.toLowerCase();
+        const matchesSet = !s.subjectSet || s.subjectSet.toLowerCase() === activeSet.toLowerCase();
+
         return matchesDept && matchesSem && matchesSet;
       }
+
+      const matchesDept = s.department === selectedDept;
+      const matchesSem = s.semester === selectedSemester;
+      const matchesShift = s.shift === selectedShift;
 
       return matchesDept && matchesSem && matchesShift;
     });
@@ -429,6 +462,13 @@ export default function ManageDuesPage() {
           </Button>
         }
       />
+
+      {successMessage && (
+        <div className="mt-4 flex items-center gap-2 rounded-xl border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 px-4 py-3 text-sm font-semibold text-emerald-800 dark:text-emerald-300 shadow-sm animate-in fade-in">
+          <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+          <span>{successMessage}</span>
+        </div>
+      )}
 
       <div className="mt-6 space-y-6">
         {loading ? (
@@ -612,7 +652,9 @@ export default function ManageDuesPage() {
             <DialogTitle>{isBulkAssignment ? "Assign Class Dues (Bulk)" : "Assign Student Fee"}</DialogTitle>
             <DialogDescription>
               {isBulkAssignment
-                ? `Assigning fee to all students in ${selectedDept} Semester ${selectedSemester} (${selectedShift} Shift)`
+                ? (programLevel === "INTERMEDIATE"
+                    ? `Assigning fee to all students in ${selectedDept} Part ${selectedSemester}`
+                    : `Assigning fee to all students in ${selectedDept} Semester ${selectedSemester} (${selectedShift} Shift)`)
                 : `Assigning fee record to ${selectedStudent?.user?.name}`}
             </DialogDescription>
           </DialogHeader>

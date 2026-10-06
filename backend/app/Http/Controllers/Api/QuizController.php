@@ -62,11 +62,14 @@ class QuizController extends Controller
             'title' => 'required|string',
             'courseId' => 'required|string',
             'duration' => 'required|integer',
-            'totalMarks' => 'nullable|integer|default:10',
-            'status' => 'nullable|string|default:Draft',
+            'totalMarks' => 'nullable|integer',
+            'status' => 'nullable|string',
             'dueDate' => 'required|date',
             'questionIds' => 'nullable|array',
         ]);
+
+        $validated['totalMarks'] = $validated['totalMarks'] ?? 10;
+        $validated['status'] = $validated['status'] ?? 'Draft';
 
         $quiz = Quiz::create([
             'title' => $validated['title'],

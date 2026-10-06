@@ -5,7 +5,7 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const token = request.cookies.get("auth_token")?.value;
 
-  // Protect /dashboard routes
+  // Protect /dashboard routes: redirect to /sign-in if no token
   if (pathname.startsWith("/dashboard")) {
     if (!token) {
       const signInUrl = new URL("/sign-in", request.url);
@@ -14,16 +14,11 @@ export function middleware(request: NextRequest) {
     }
   }
 
-  // If already authenticated and visiting sign-in or sign-up, redirect to dashboard
-  if ((pathname.startsWith("/sign-in") || pathname.startsWith("/sign-up")) && token) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
-  }
-
   return NextResponse.next();
 }
 
 export default middleware;
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/sign-in", "/sign-up"],
+  matcher: ["/dashboard/:path*"],
 };

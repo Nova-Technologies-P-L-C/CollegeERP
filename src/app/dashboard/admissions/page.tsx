@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/axios";
-import { CheckCircle, XCircle, Clock, Eye, Trash2, Upload, Users, Shield, RefreshCw, CheckSquare } from "lucide-react";
+import { CheckCircle, XCircle, Clock, Eye, Trash2, Upload, Users, Shield, RefreshCw, CheckSquare, CreditCard } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { DataTable, Column } from "@/components/dashboard/DataTable";
@@ -180,6 +180,12 @@ export default function ManageAdmissionsPage() {
     newStatus: "Pending" | "Approved" | "Rejected",
   ) => {
     setMutationError(null);
+    if (newStatus === "Approved") {
+      setMutationError(
+        "Cannot approve student admission before payment verification. The Accountant must verify payment with a valid receipt number and amount at the Accountant Desk."
+      );
+      return;
+    }
     setSubmittingId(id);
     setSubmittingStatus(newStatus);
     try {
@@ -191,13 +197,6 @@ export default function ManageAdmissionsPage() {
       );
       if (selectedAdmission?.id === id) {
         setSelectedAdmission({ ...selectedAdmission, status: newStatus });
-      }
-      if (newStatus === "Approved") {
-        setMutationError(null);
-        setSuccessMessage(
-          "Admission approved — Student record and initial fees auto-created!",
-        );
-        setTimeout(() => setSuccessMessage(null), 5000);
       }
       router.refresh();
     } catch (err: unknown) {
@@ -354,11 +353,17 @@ export default function ManageAdmissionsPage() {
     try {
       if (activeTab === "students") {
         const ids = Array.from(selectedAdmissionIds);
+        if (bulkAction === "Approve") {
+          setMutationError(
+            "Student admissions cannot be approved in bulk before payment verification. Each student must have their fee verified with an official receipt at the Accountant Desk."
+          );
+          setBulkProcessing(false);
+          setBulkConfirmOpen(false);
+          return;
+        }
         for (const id of ids) {
           try {
-            if (bulkAction === "Approve") {
-              await api.patch(`/api/admissions/${id}`, { status: "Approved" });
-            } else if (bulkAction === "Reject") {
+            if (bulkAction === "Reject") {
               await api.patch(`/api/admissions/${id}`, { status: "Rejected" });
             } else if (bulkAction === "Delete") {
               await api.delete(`/api/admissions/${id}`);
@@ -484,16 +489,13 @@ export default function ManageAdmissionsPage() {
           {row.status === "Pending" && (
             <>
               <button
-                onClick={() => handleStatusChange(row.id, "Approved")}
+                onClick={() => router.push("/dashboard/accountant")}
                 disabled={submittingId !== null || deletingId !== null || importing}
-                className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                title="Approve"
+                className="flex h-8 px-2 items-center gap-1 text-xs font-semibold rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40 border border-amber-300 dark:border-amber-700/60 transition-colors shadow-2xs"
+                title="Awaiting fee clearance. Verify payment at Accountant Desk."
               >
-                {submittingId === row.id && submittingStatus === "Approved" ? (
-                  <Spinner size="sm" variant="primary" />
-                ) : (
-                  <CheckCircle className="h-4 w-4 text-emerald-600" />
-                )}
+                <CreditCard className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                <span className="hidden sm:inline">Verify Fee</span>
               </button>
               <button
                 onClick={() => handleStatusChange(row.id, "Rejected")}
@@ -846,15 +848,27 @@ export default function ManageAdmissionsPage() {
 
             {/* Actions */}
             <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                onClick={() => openBulkConfirm("Approve")}
-                disabled={bulkProcessing}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white h-8 px-3 text-xs font-semibold gap-1.5"
-              >
-                <CheckCircle className="h-3.5 w-3.5" />
-                Approve All
-              </Button>
+              {activeTab !== "students" ? (
+                <Button
+                  size="sm"
+                  onClick={() => openBulkConfirm("Approve")}
+                  disabled={bulkProcessing}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white h-8 px-3 text-xs font-semibold gap-1.5"
+                >
+                  <CheckCircle className="h-3.5 w-3.5" />
+                  Approve All
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  onClick={() => router.push("/dashboard/accountant")}
+                  className="bg-amber-600 hover:bg-amber-700 text-white h-8 px-3 text-xs font-semibold gap-1.5"
+                  title="Fee clearance at Accountant Desk is required before admission approval"
+                >
+                  <CreditCard className="h-3.5 w-3.5" />
+                  Clear at Accountant Desk
+                </Button>
+              )}
               <Button
                 size="sm"
                 variant="destructive"
@@ -1056,17 +1070,24 @@ export default function ManageAdmissionsPage() {
                   </p>
                   <div className="flex items-center gap-2 mt-1">
                     <Badge className={statusColors[selectedAdmission.status]}>
-                      {selectedAdmission.status}
+                      {selectedAdmission.status === "Pending" ? "Awaiting Payment Verification" : selectedAdmission.status}
                     </Badge>
-                    {selectedAdmission.status === "Pending" && (
-                      <span className="text-xs text-muted-foreground italic">
-                        (Needs review)
-                      </span>
-                    )}
                   </div>
                 </div>
                 <AuditBadgeInline entity="Admission" entityId={selectedAdmission.id} />
               </div>
+
+              {selectedAdmission.status === "Pending" && (
+                <div className="rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-3.5 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2.5">
+                  <CreditCard className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                  <div className="space-y-1">
+                    <p className="font-bold">Awaiting Accountant Payment Clearance</p>
+                    <p className="text-amber-700/90 dark:text-amber-400/90 leading-relaxed">
+                      Admissions cannot be approved before payment verification. The Accountant must clear payment with an official transaction receipt number at the Accountant Desk before student enrollment is finalized.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -1074,18 +1095,14 @@ export default function ManageAdmissionsPage() {
             {selectedAdmission?.status === "Pending" ? (
               <>
                 <Button
-                  onClick={() =>
-                    handleStatusChange(selectedAdmission.id, "Approved")
-                  }
-                  disabled={submittingId !== null}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white flex-1 min-w-[120px]"
+                  onClick={() => {
+                    setViewDialogOpen(false);
+                    router.push("/dashboard/accountant");
+                  }}
+                  className="bg-brand-primary hover:bg-brand-primary/90 text-white flex-1 min-w-[150px]"
                 >
-                  {submittingId === selectedAdmission.id && submittingStatus === "Approved" ? (
-                    <Spinner size="sm" variant="white" className="mr-2" />
-                  ) : (
-                    <CheckCircle className="h-4 w-4 mr-2" />
-                  )}
-                  Approve
+                  <CreditCard className="h-4 w-4 mr-2" />
+                  Clear at Accountant Desk
                 </Button>
                 <Button
                   onClick={() =>

@@ -30,13 +30,16 @@ class QuestionController extends Controller
         $validated = $request->validate([
             'courseId' => 'required|string',
             'text' => 'required|string',
-            'type' => 'nullable|string|default:MCQ',
+            'type' => 'nullable|string',
             'options' => 'required|array',
             'correctOption' => 'nullable|integer',
             'sampleAnswer' => 'nullable|string',
-            'marks' => 'nullable|integer|default:1',
+            'marks' => 'nullable|integer',
             'quizId' => 'nullable|string',
         ]);
+
+        $validated['type'] = $validated['type'] ?? 'MCQ';
+        $validated['marks'] = $validated['marks'] ?? 1;
 
         $question = Question::create($validated);
 

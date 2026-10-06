@@ -10,7 +10,7 @@ class Question extends BaseModel
     const UPDATED_AT = null; // Question only has createdAt
 
     protected $casts = [
-        'options' => 'array',
+        'options' => \App\Casts\PgArray::class,
         'correctOption' => 'integer',
         'marks' => 'integer',
         'createdAt' => 'datetime',

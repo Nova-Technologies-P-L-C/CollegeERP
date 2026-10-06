@@ -85,7 +85,8 @@ interface CourseWithDetails {
   faculty: { user: { name: string | null }; department: string } | null;
   facultyMorning?: { user: { name: string | null }; department: string } | null;
   facultyEvening?: { user: { name: string | null }; department: string } | null;
-  _count: { enrollments: number };
+  _count?: { enrollments: number };
+  enrollments_count?: number;
 }
 
 interface FacultyOption {
@@ -219,7 +220,7 @@ export default function ManageCoursesPage() {
 
   useEffect(() => {
     if (programLevel === "INTERMEDIATE") {
-      setSelectedDept("F.Sc Pre-Medical");
+      setSelectedDept("F.Sc Pre-Engineering");
       setSelectedSem(1);
       setSelectedSet("all");
     } else {
@@ -461,7 +462,7 @@ export default function ManageCoursesPage() {
       courseName: "",
       creditHours: 3,
       totalMarks: 100,
-      department: selectedDept || (programLevel === "INTERMEDIATE" ? "F.Sc Pre-Medical" : "Computer Science"),
+      department: selectedDept || (programLevel === "INTERMEDIATE" ? "F.Sc Pre-Engineering" : "Computer Science"),
       semester: selectedSem || 1,
       subjectSet: selectedSet || "Set 1",
     });
@@ -821,7 +822,7 @@ export default function ManageCoursesPage() {
       header: "Enrolled",
       sortable: false,
       render: (row) => (
-        <span className="font-medium">{row._count.enrollments}</span>
+        <span className="font-medium">{row._count?.enrollments ?? row.enrollments_count ?? 0}</span>
       ),
     },
     {

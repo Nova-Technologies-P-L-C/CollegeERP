@@ -34,7 +34,47 @@ class GradeController extends Controller
         }
 
         if ($courseId = $request->query('courseId')) {
-            $query->where('courseId', $courseId);
+            $course = Course::with(['enrollments.student.user'])->find($courseId);
+            if ($course) {
+                $existingGrades = Grade::with([
+                    'student:id,rollNo,shift,blocked,userId',
+                    'student.user:id,name',
+                    'course:id,courseCode,courseName,semester',
+                ])->where('courseId', $courseId)->get()->keyBy('studentId');
+
+                $allEntries = [];
+                foreach ($course->enrollments as $enrollment) {
+                    $student = $enrollment->student;
+                    if (!$student) continue;
+
+                    if ($existingGrades->has($student->id)) {
+                        $allEntries[] = $existingGrades->get($student->id);
+                    } else {
+                        $allEntries[] = [
+                            'id' => 'new-' . $student->id,
+                            'studentId' => $student->id,
+                            'courseId' => $courseId,
+                            'quizMarks' => 0,
+                            'assignmentMarks' => 0,
+                            'midMarks' => 0,
+                            'finalMarks' => 0,
+                            'total' => 0,
+                            'gpa' => 0.0,
+                            'locked' => false,
+                            'student' => [
+                                'rollNo' => $student->rollNo,
+                                'shift' => $student->shift ?: 'Morning',
+                                'blocked' => (bool)$student->blocked,
+                                'user' => [
+                                    'name' => $student->user->name ?? null,
+                                ],
+                                'cgpa' => $student->cgpa ?: 0.0,
+                            ],
+                        ];
+                    }
+                }
+                return response()->json($allEntries);
+            }
         }
 
         $grades = $query->get();

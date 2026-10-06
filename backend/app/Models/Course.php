@@ -14,6 +14,15 @@ class Course extends BaseModel
         'part' => 'integer',
     ];
 
+    protected $appends = ['_count'];
+
+    public function getCountAttribute(): array
+    {
+        return [
+            'enrollments' => (int) ($this->attributes['enrollments_count'] ?? $this->enrollments_count ?? 0),
+        ];
+    }
+
     public function faculty()
     {
         return $this->belongsTo(Faculty::class, 'assignedFaculty', 'id');

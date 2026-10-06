@@ -408,13 +408,13 @@ export default function StudentSetupPage() {
                     Application Under Review
                   </h1>
                   <p className="text-sm text-zinc-500 dark:text-zinc-400 max-w-sm mx-auto leading-relaxed">
-                    Your profile details are currently pending review and validation by the administrator. Once approved, your full dashboard access will unlock.
+                    Your profile details and admission fees are currently pending verification. Once payment is verified by the accountant, your enrollment and full dashboard access will unlock.
                   </p>
                   
                   <div className="flex justify-center pt-2">
                     <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 shadow-xs">
                       <span className="h-2 w-2 rounded-full bg-amber-500 animate-ping" />
-                      <span>Awaiting Admin Approval</span>
+                      <span>Awaiting Fee Clearance & Approval</span>
                     </div>
                   </div>
                 </div>

@@ -4,6 +4,7 @@ import { ProgramLevelProvider } from "@/context/program-level-context";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { getRoleLabel } from "@/lib/sidebar-config";
 import type { UserRole } from "@/types";
+import { fetchLaravelMe } from "@/lib/laravel";
 
 export const dynamic = "force-dynamic";
 
@@ -19,27 +20,24 @@ export default async function DashboardLayout({
     redirect("/sign-in");
   }
 
-  let role: UserRole = "student";
+  const user = await fetchLaravelMe(token);
 
-  try {
-    const res = await fetch("http://127.0.0.1:8000/api/me", {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-      },
-      cache: "no-store",
-    });
-
-    if (!res.ok) {
-      redirect("/sign-in");
-    }
-
-    const user = await res.json();
-    role = (user.role || "STUDENT").toLowerCase() as UserRole;
-  } catch (err) {
-    console.error("DashboardLayout fetch user error:", err);
+  if (!user) {
+    redirect("/sign-in");
   }
 
+  let role: UserRole = (user.role || "STUDENT").toLowerCase() as UserRole;
+  if (role === "admin") {
+    if (user.admin?.adminType === "PLATFORM_ADMIN") {
+      role = "platform_admin";
+    } else if (user.admin?.adminType === "ORG_ADMIN") {
+      role = "org_admin";
+    } else if (user.admin?.adminType === "REGISTRAR") {
+      role = "registrar";
+    } else if (user.admin?.adminType === "ACCOUNTANT") {
+      role = "accountant";
+    }
+  }
   const roleLabel = getRoleLabel(role);
 
   return (

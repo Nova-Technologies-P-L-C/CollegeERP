@@ -11,8 +11,11 @@ model User {
   clerkId   String?  @unique
   email     String   @unique
   name      String?
+  password  String?
   role      Role     @default(STUDENT)
   avatar    String?
+  branchId  String?
+  branch    Branch?   @relation(fields: [branchId], references: [id], onDelete: SetNull)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   admin     Admin?
@@ -55,6 +58,8 @@ model Student {
   feedbacks      Feedback[]
   grades         Grade[]
   quizAttempts   QuizAttempt[]
+  branchId       String?
+  branch         Branch?       @relation(fields: [branchId], references: [id], onDelete: SetNull)
   user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([programLevel])
@@ -79,13 +84,18 @@ model Faculty {
   teachesMorning Course[]            @relation("FacultyCourseMorning")
   teachesEvening Course[]            @relation("FacultyCourseEvening")
   attendances    FacultyAttendance[]
+  branchId       String?
+  branch         Branch?             @relation(fields: [branchId], references: [id], onDelete: SetNull)
   user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Admin {
-  id     String @id @default(uuid())
-  userId String @unique
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String    @id @default(uuid())
+  userId    String    @unique
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  adminType AdminType @default(BRANCH_ADMIN)
+  branchId  String?
+  branch    Branch?   @relation(fields: [branchId], references: [id], onDelete: SetNull)
 }
 
 model Course {
@@ -113,6 +123,8 @@ model Course {
   quizzes         Quiz[]
   timetables      Timetable[]
   questions       Question[]
+  branchId        String?
+  branch          Branch?      @relation(fields: [branchId], references: [id], onDelete: SetNull)
 
   @@unique([courseCode, department])
   @@index([programLevel])
@@ -436,5 +448,51 @@ model FacultyAttendance {
 
   @@unique([facultyId, date])
   @@index([date])
+}
+
+enum AdminType {
+  PLATFORM_ADMIN
+  BRANCH_ADMIN
+  ORG_ADMIN
+  REGISTRAR
+  ACCOUNTANT
+}
+
+enum BranchStatus {
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+model Branch {
+  id          String       @id @default(uuid())
+  name        String
+  code        String       @unique
+  city        String?
+  address     String?
+  phone       String?
+  email       String?
+  status      BranchStatus @default(PENDING_APPROVAL)
+  approvedAt  DateTime?
+  approvedBy  String?
+  isHead      Boolean      @default(false)
+
+  // Sub-branch hierarchy: Branch A can have sub-branches A1, A2
+  parentId    String?
+  parent      Branch?      @relation("BranchHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  subBranches Branch[]     @relation("BranchHierarchy")
+
+  admins      Admin[]
+  users       User[]
+  students    Student[]
+  faculty     Faculty[]
+  courses     Course[]
+
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([parentId])
+  @@index([status])
 }
 

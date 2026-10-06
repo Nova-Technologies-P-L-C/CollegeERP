@@ -81,7 +81,7 @@ export function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
   const fetchAnnouncements = useCallback(async () => {
     try {
       const [annRes, meRes] = await Promise.all([
-        api.get<Announcement[]>("/api/announcements").catch(() => ({ data: [] })),
+        api.get<Announcement[]>(`/api/announcements?programLevel=${programLevel}`).catch(() => ({ data: [] })),
         userId && userId !== "anonymous" ? api.get("/api/me").catch(() => null) : Promise.resolve(null),
       ]);
       const annData = Array.isArray(annRes.data) ? annRes.data : [];
@@ -99,7 +99,8 @@ export function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
     } catch (err) {
       console.error("Failed to fetch announcements/fees for bell:", err);
     }
-  }, [role, userId]);
+  }, [role, userId, programLevel]);
+
 
   const handleDismissItem = (id: string) => {
     if (!userId) return;

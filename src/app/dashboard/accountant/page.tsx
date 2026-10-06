@@ -12,11 +12,8 @@ import {
   Search,
   RefreshCw,
   Printer,
-  FileCheck,
-  Building,
   UserCheck,
   DollarSign,
-  ArrowRight,
   ShieldCheck,
   BadgeAlert,
 } from "lucide-react";
@@ -42,7 +39,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { motion, AnimatePresence } from "framer-motion";
 import { TableSkeleton, Spinner } from "@/components/ui";
 
 interface PendingAdmission extends Record<string, unknown> {

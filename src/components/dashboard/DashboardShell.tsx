@@ -5,10 +5,11 @@ import { usePathname } from "next/navigation";
 import { LayoutDashboard } from "lucide-react";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
-import { getNavItems } from "@/lib/sidebar-config";
+import { getNavItems, getRoleLabel } from "@/lib/sidebar-config";
 import type { UserRole } from "@/types";
 import { api } from "@/lib/axios";
 import { useAuth } from "@/context/SanctumAuthContext";
+import { useProgramLevel } from "@/context/program-level-context";
 
 interface DashboardShellProps {
   children: React.ReactNode;
@@ -18,17 +19,51 @@ interface DashboardShellProps {
 
 export function DashboardShell({ children, role, roleLabel }: DashboardShellProps) {
   const { isLoaded, isSignedIn } = useAuth();
+  const { programLevel } = useProgramLevel();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [prevRole, setPrevRole] = useState(role);
-  const [navItems, setNavItems] = useState(() => getNavItems(role));
-  const [isNavigating, setIsNavigating] = useState(false);
   const pathname = usePathname();
+  const [isNavigating, setIsNavigating] = useState(false);
   const [prevPathname, setPrevPathname] = useState(pathname);
 
-  if (role !== prevRole) {
-    setPrevRole(role);
-    setNavItems(getNavItems(role));
-  }
+  const isFacultyPath = [
+    "/dashboard/mark-attendance",
+    "/dashboard/classes",
+    "/dashboard/grades",
+    "/dashboard/question-bank",
+    "/dashboard/quizzes",
+  ].some((p) => pathname.startsWith(p));
+
+  const isStudentPath = [
+    "/dashboard/my-grades",
+    "/dashboard/my-courses",
+    "/dashboard/my-attendance",
+    "/dashboard/my-dues",
+    "/dashboard/my-timetable",
+    "/dashboard/take-quiz",
+    "/dashboard/submit-feedback",
+  ].some((p) => pathname.startsWith(p));
+
+  const effectiveRole: UserRole =
+    role === "admin" && pathname.startsWith("/dashboard/org-admin")
+      ? "org_admin"
+      : role === "admin" && pathname.startsWith("/dashboard/platform-admin")
+      ? "platform_admin"
+      : role === "admin" && (pathname.startsWith("/dashboard/registrar") || pathname.startsWith("/dashboard/admissions"))
+      ? "registrar"
+      : role === "admin" && (pathname.startsWith("/dashboard/accountant") || pathname.startsWith("/dashboard/dues"))
+      ? "accountant"
+      : role === "admin" && isFacultyPath
+      ? "faculty"
+      : role === "admin" && isStudentPath
+      ? "student"
+      : role;
+
+  const effectiveRoleLabel = effectiveRole !== role ? getRoleLabel(effectiveRole) : roleLabel;
+  const [navItems, setNavItems] = useState(() => getNavItems(effectiveRole));
+
+  useEffect(() => {
+    setNavItems(getNavItems(effectiveRole));
+  }, [effectiveRole]);
 
   if (pathname !== prevPathname) {
     setPrevPathname(pathname);
@@ -76,7 +111,7 @@ export function DashboardShell({ children, role, roleLabel }: DashboardShellProp
         const [admissionsRes, onboardingRes, feedbackRes] = await Promise.allSettled([
           api.get<unknown[]>("/api/admissions?status=Pending&limit=100"),
           api.get<unknown[]>("/api/onboarding?status=Pending"),
-          api.get<{ date: string }[]>("/api/feedback"),
+          api.get<{ date: string }[]>(`/api/feedback?programLevel=${programLevel}`),
         ]);
 
         if (!isMounted) return;
@@ -136,7 +171,7 @@ export function DashboardShell({ children, role, roleLabel }: DashboardShellProp
       isMounted = false;
       clearInterval(interval);
     };
-  }, [role, pathname, isLoaded, isSignedIn]);
+  }, [role, pathname, isLoaded, isSignedIn, programLevel]);
 
 
   return (
@@ -160,7 +195,7 @@ export function DashboardShell({ children, role, roleLabel }: DashboardShellProp
       )}
       <Sidebar
         navItems={navItems}
-        roleLabel={roleLabel}
+        roleLabel={effectiveRoleLabel}
         isMobileOpen={mobileOpen}
         onMobileClose={() => setMobileOpen(false)}
         onNavigate={() => setIsNavigating(true)}

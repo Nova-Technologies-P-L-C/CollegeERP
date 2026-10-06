@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ListSkeleton } from "@/components/ui";
 
+import { useProgramLevel } from "@/context/program-level-context";
+
 interface Announcement {
   id: string;
   title: string;
@@ -31,6 +33,7 @@ interface Fee {
 
 export default function NotificationsPage() {
   const { user } = useUser();
+  const { programLevel } = useProgramLevel();
   const userId = user?.id || "anonymous";
   const role = (user?.publicMetadata?.role as string || "student").toLowerCase();
   const isStudent = role === "student";
@@ -50,7 +53,7 @@ export default function NotificationsPage() {
       if (!isRefresh) setLoading(true);
       else setRefreshing(true);
 
-      const annRes = await api.get<Announcement[]>("/api/announcements");
+      const annRes = await api.get<Announcement[]>(`/api/announcements?programLevel=${programLevel}`);
       setAnnouncements(Array.isArray(annRes.data) ? annRes.data : []);
 
       if (isStudent) {
@@ -63,7 +66,7 @@ export default function NotificationsPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [isStudent]);
+  }, [isStudent, programLevel]);
 
   useEffect(() => {
     fetchData();

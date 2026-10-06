@@ -7,24 +7,18 @@ import {
   Users,
   GraduationCap,
   DollarSign,
-  TrendingUp,
   Award,
   Search,
-  Filter,
   ChevronLeft,
   ChevronRight,
-  ShieldCheck,
   Clock,
   BookOpen,
   Receipt,
-  Download,
-  CheckCircle2,
-  AlertCircle,
-  BarChart3,
-  Calendar,
+  GitBranch,
 } from "lucide-react";
+import type { Branch } from "@/types";
 import { PageHeader } from "@/components/dashboard/PageHeader";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,8 +41,6 @@ import {
   Pie,
   Cell,
   Legend,
-  AreaChart,
-  Area,
 } from "recharts";
 import { TableSkeleton } from "@/components/ui";
 
@@ -104,6 +96,7 @@ export default function OrgAdminDashboardPage() {
   const [faculty, setFaculty] = useState<FacultyRecord[]>([]);
   const [fees, setFees] = useState<FeeRecord[]>([]);
   const [courses, setCourses] = useState<CourseRecord[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
 
   // Explorer Tab State
   const [activeTab, setActiveTab] = useState<"students" | "faculty" | "fees" | "courses">("students");
@@ -114,23 +107,39 @@ export default function OrgAdminDashboardPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 8;
 
+  const handleTabChange = (tab: "students" | "faculty" | "fees" | "courses") => {
+    setActiveTab(tab);
+    setCurrentPage(1);
+  };
+
+  const handleSearchChange = (val: string) => {
+    setSearchQuery(val);
+    setCurrentPage(1);
+  };
+
+  const handleDeptChange = (dept: string) => {
+    setSelectedDept(dept);
+    setCurrentPage(1);
+  };
+
   // Load institutional data
   useEffect(() => {
     let isMounted = true;
-    setLoading(true);
 
     Promise.all([
       api.get<StudentRecord[]>("/api/students").catch(() => ({ data: [] })),
       api.get<FacultyRecord[]>("/api/faculty").catch(() => ({ data: [] })),
       api.get<FeeRecord[]>("/api/fees").catch(() => ({ data: [] })),
       api.get<CourseRecord[]>("/api/courses").catch(() => ({ data: [] })),
+      api.get<Branch[]>("/api/branches").catch(() => ({ data: [] })),
     ])
-      .then(([studentsRes, facultyRes, feesRes, coursesRes]) => {
+      .then(([studentsRes, facultyRes, feesRes, coursesRes, branchesRes]) => {
         if (!isMounted) return;
         setStudents(Array.isArray(studentsRes.data) ? studentsRes.data : []);
         setFaculty(Array.isArray(facultyRes.data) ? facultyRes.data : []);
         setFees(Array.isArray(feesRes.data) ? feesRes.data : []);
         setCourses(Array.isArray(coursesRes.data) ? coursesRes.data : []);
+        setBranches(Array.isArray(branchesRes.data) ? branchesRes.data : []);
       })
       .finally(() => {
         if (isMounted) setLoading(false);
@@ -140,11 +149,6 @@ export default function OrgAdminDashboardPage() {
       isMounted = false;
     };
   }, []);
-
-  // Reset pagination on filter or tab change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [activeTab, searchQuery, selectedDept]);
 
   // Executive KPI Metrics
   const metrics = useMemo(() => {
@@ -298,12 +302,34 @@ export default function OrgAdminDashboardPage() {
         ]}
         action={
           <div className="flex items-center gap-2">
-            <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-300 font-bold px-3 py-1">
-              Executive View
+            <Badge variant="outline" className="bg-purple-500/10 text-purple-700 border-purple-300 font-bold px-3 py-1">
+              Executive View (Read-Only)
             </Badge>
           </div>
         }
       />
+
+      {/* EXECUTIVE OBSERVABILITY BANNER */}
+      <div className="rounded-xl border border-purple-200 dark:border-purple-900/40 bg-purple-50/60 dark:bg-purple-950/20 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <div className="p-2 rounded-lg bg-purple-600 text-white shrink-0 mt-0.5">
+            <Building2 className="h-5 w-5" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-foreground">
+              Executive Observability & Strategic Analytics (Read-Only)
+            </h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Organizational Admins hold macro strategic oversight across all campuses via visual graphs, financial totals, and academic performance metrics. Operational actions (editing student records, timetables, and fee structures) are managed directly by Branch Admins.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <Badge variant="outline" className="bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-300 font-bold px-3 py-1 text-xs">
+            Visual Analytics Mode
+          </Badge>
+        </div>
+      </div>
 
       {/* 1. EXECUTIVE KPI SUMMARY METRICS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -436,6 +462,61 @@ export default function OrgAdminDashboardPage() {
         </Card>
       </div>
 
+      {/* MULTI-BRANCH COMPARATIVE ANALYTICS & HEALTH */}
+      <div id="branch-analytics" className="space-y-4 pt-2">
+        <div className="flex items-center justify-between border-b border-border pb-2">
+          <div>
+            <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+              <GitBranch className="h-4 w-4 text-brand-primary" />
+              Multi-Branch & Campus Comparative Overview
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              Strategic distribution of resources across Head Campus (Branch A) and satellite sub-branches (A1, A2).
+            </p>
+          </div>
+          <Badge variant="outline" className="text-xs font-mono font-bold">
+            {branches.length} Campuses Monitored
+          </Badge>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {branches.map((b) => (
+            <Card key={b.id} className="border-border bg-card shadow-xs">
+              <CardHeader className="p-4 pb-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-xs font-black text-brand-primary">{b.code}</span>
+                  <Badge variant="outline" className={b.status === "APPROVED" ? "bg-emerald-500/10 text-emerald-700 border-emerald-300 text-[10px]" : "bg-amber-500/10 text-amber-700 border-amber-300 text-[10px]"}>
+                    {b.status}
+                  </Badge>
+                </div>
+                <CardTitle className="text-sm font-bold text-foreground mt-1 truncate">
+                  {b.name}
+                </CardTitle>
+                <CardDescription className="text-[11px] truncate">
+                  {b.isHead ? "Head Campus / Central HQ" : `Sub-Branch (${b.parent?.code || "A"}) • ${b.city || "Ethiopia"}`}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-4 pt-2 space-y-2 text-xs">
+                <div className="grid grid-cols-3 gap-1 py-1 text-center bg-muted/40 rounded-lg border border-border/40">
+                  <div>
+                    <div className="font-bold text-foreground">{b.sub_branches_count || b.subBranches?.length || 0}</div>
+                    <div className="text-[10px] text-muted-foreground">Sub-Campuses</div>
+                  </div>
+                  <div>
+                    <div className="font-bold text-foreground">{b.students_count || 0}</div>
+                    <div className="text-[10px] text-muted-foreground">Students</div>
+                  </div>
+                  <div>
+                    <div className="font-bold text-foreground">{b.faculty_count || 0}</div>
+                    <div className="text-[10px] text-muted-foreground">Faculty</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+
       {/* 3. PAGINATED MULTI-ROLE EXPLORER */}
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-3">
@@ -443,7 +524,7 @@ export default function OrgAdminDashboardPage() {
           <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
             <Button
               variant={activeTab === "students" ? "default" : "ghost"}
-              onClick={() => setActiveTab("students")}
+              onClick={() => handleTabChange("students")}
               className="gap-2 text-xs font-bold"
             >
               <Users className="h-4 w-4" />
@@ -451,7 +532,7 @@ export default function OrgAdminDashboardPage() {
             </Button>
             <Button
               variant={activeTab === "faculty" ? "default" : "ghost"}
-              onClick={() => setActiveTab("faculty")}
+              onClick={() => handleTabChange("faculty")}
               className="gap-2 text-xs font-bold"
             >
               <GraduationCap className="h-4 w-4" />
@@ -459,7 +540,7 @@ export default function OrgAdminDashboardPage() {
             </Button>
             <Button
               variant={activeTab === "fees" ? "default" : "ghost"}
-              onClick={() => setActiveTab("fees")}
+              onClick={() => handleTabChange("fees")}
               className="gap-2 text-xs font-bold"
             >
               <Receipt className="h-4 w-4" />
@@ -467,7 +548,7 @@ export default function OrgAdminDashboardPage() {
             </Button>
             <Button
               variant={activeTab === "courses" ? "default" : "ghost"}
-              onClick={() => setActiveTab("courses")}
+              onClick={() => handleTabChange("courses")}
               className="gap-2 text-xs font-bold"
             >
               <BookOpen className="h-4 w-4" />
@@ -482,11 +563,11 @@ export default function OrgAdminDashboardPage() {
               <Input
                 placeholder="Search records..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => handleSearchChange(e.target.value)}
                 className="pl-8 h-9 text-xs"
               />
             </div>
-            <Select value={selectedDept} onValueChange={setSelectedDept}>
+            <Select value={selectedDept} onValueChange={handleDeptChange}>
               <SelectTrigger className="w-40 h-9 text-xs">
                 <SelectValue placeholder="Department" />
               </SelectTrigger>

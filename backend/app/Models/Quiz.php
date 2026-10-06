@@ -13,6 +13,16 @@ class Quiz extends BaseModel
         'dueDate' => 'datetime',
     ];
 
+    protected $appends = ['_count'];
+
+    public function getCountAttribute(): array
+    {
+        return [
+            'questions' => (int) ($this->attributes['questions_count'] ?? $this->questions_count ?? 0),
+            'attempts' => (int) ($this->attributes['attempts_count'] ?? $this->attempts_count ?? 0),
+        ];
+    }
+
     public function course()
     {
         return $this->belongsTo(Course::class, 'courseId', 'id');

@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { UserManagementClient } from "./UserManagementClient";
+import { fetchLaravelMe } from "@/lib/laravel";
 
 export const dynamic = "force-dynamic";
 
@@ -9,23 +10,12 @@ export default async function UsersPage() {
   const token = cookieStore.get("auth_token")?.value;
   if (!token) redirect("/sign-in");
 
-  try {
-    const res = await fetch("http://127.0.0.1:8000/api/me", {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-      },
-      cache: "no-store",
-    });
+  const user = await fetchLaravelMe(token);
+  if (!user) redirect("/sign-in");
 
-    if (!res.ok) redirect("/sign-in");
-
-    const user = await res.json();
-    if ((user.role || "").toUpperCase() !== "ADMIN") {
-      redirect("/dashboard");
-    }
-  } catch (err) {
-    console.error("UsersPage fetch user error:", err);
+  const adminType = user.admin?.adminType || "";
+  if ((user.role || "").toUpperCase() !== "ADMIN" || ["REGISTRAR", "ACCOUNTANT", "ORG_ADMIN"].includes(adminType)) {
+    redirect("/dashboard");
   }
 
   return <UserManagementClient />;

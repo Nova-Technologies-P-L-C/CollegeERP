@@ -2,11 +2,8 @@
   "name": "nova-technology-erp",
   "version": "0.1.0",
   "private": true,
-  "resolutions": {
-    "@clerk/shared": "3.47.3"
-  },
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --webpack",
     "build": "bun prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
@@ -18,8 +15,6 @@
     "seed:mockdata": "bun prisma/seed.ts"
   },
   "dependencies": {
-    "@clerk/nextjs": "^6.37.3",
-    "@clerk/themes": "^2.4.57",
     "@gsap/react": "^2.1.2",
     "@prisma/adapter-pg": "^7.7.0",
     "@prisma/client": "^7.6.0",
@@ -39,7 +34,6 @@
     "react-chartjs-2": "^5.3.1",
     "react-dom": "19.2.3",
     "recharts": "3.8.0",
-    "svix": "^1.90.0",
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {

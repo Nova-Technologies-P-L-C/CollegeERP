@@ -20,6 +20,15 @@ class Student extends BaseModel
         'part' => 'integer',
     ];
 
+    protected $appends = ['_count'];
+
+    public function getCountAttribute(): array
+    {
+        return [
+            'enrollments' => (int) ($this->attributes['enrollments_count'] ?? $this->enrollments_count ?? 0),
+        ];
+    }
+
     public function user()
     {
         return $this->belongsTo(User::class, 'userId', 'id');

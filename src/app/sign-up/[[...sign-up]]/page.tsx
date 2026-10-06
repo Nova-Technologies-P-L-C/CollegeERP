@@ -27,7 +27,7 @@ export default function SignUpPage() {
 
   // Interaction states
   const [loading, setLoading] = useState(false);
-  const [socialLoading, setSocialLoading] = useState<string | null>(null);
+  const [socialLoading] = useState<string | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -56,8 +56,8 @@ export default function SignUpPage() {
       } else {
         setError(res.error || "Failed to create account. Please check inputs.");
       }
-    } catch (err: any) {
-      setError(err?.message || "Failed to create account. Please check inputs.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to create account. Please check inputs.");
     } finally {
       setLoading(false);
     }

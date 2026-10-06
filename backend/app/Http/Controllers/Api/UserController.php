@@ -16,18 +16,55 @@ class UserController extends Controller
     {
         $query = User::with(['student', 'faculty', 'admin']);
 
-        if ($role = $request->query('role')) {
-            if ($role !== 'ALL') {
-                $query->where('role', strtoupper($role));
+        $role = $request->query('role');
+        if ($role && $role !== 'ALL') {
+            $query->where('role', strtoupper($role));
+        }
+
+        $level = $request->query('programLevel');
+        if ($level) {
+            if ($role === 'STUDENT') {
+                if ($level === 'INTERMEDIATE') {
+                    $query->whereHas('student', fn($sq) => $sq->where('programLevel', 'INTERMEDIATE'));
+                } else {
+                    $query->whereHas('student', fn($sq) => $sq->where('programLevel', 'BS')->orWhereNull('programLevel'));
+                }
+            } else {
+                $query->where(function ($q) use ($level) {
+                    if ($level === 'INTERMEDIATE') {
+                        $q->whereHas('student', fn($sq) => $sq->where('programLevel', 'INTERMEDIATE'))
+                          ->orWhereHas('faculty')
+                          ->orWhereHas('admin');
+                    } else {
+                        $q->whereHas('student', fn($sq) => $sq->where('programLevel', 'BS')->orWhereNull('programLevel'))
+                          ->orWhereHas('faculty')
+                          ->orWhereHas('admin');
+                    }
+                });
             }
         }
 
-        if ($level = $request->query('programLevel')) {
-            $query->where(function ($q) use ($level) {
-                $q->whereHas('student', fn($sq) => $sq->where('programLevel', $level))
-                  ->orWhereHas('faculty')
-                  ->orWhereHas('admin');
-            });
+        if ($dept = $request->query('department')) {
+            if ($dept !== 'ALL' && $dept !== 'all') {
+                $query->where(function ($q) use ($dept) {
+                    $q->whereHas('student', function ($sq) use ($dept) {
+                        $sq->where('department', $dept)
+                           ->orWhere('discipline', $dept);
+                    })->orWhereHas('faculty', function ($fq) use ($dept) {
+                        $fq->where('department', $dept);
+                    });
+                });
+            }
+        }
+
+        if ($sem = $request->query('semester')) {
+            if ($sem !== 'ALL' && $sem !== 'all') {
+                $semInt = (int)$sem;
+                $query->whereHas('student', function ($sq) use ($semInt) {
+                    $sq->where('semester', $semInt)
+                       ->orWhere('part', $semInt);
+                });
+            }
         }
 
         if ($search = $request->query('search')) {

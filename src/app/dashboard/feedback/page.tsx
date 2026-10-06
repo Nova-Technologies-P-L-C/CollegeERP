@@ -116,8 +116,8 @@ export default function FacultyFeedbackPage() {
       className="space-y-6"
     >
       <PageHeader
-        title={isAdmin ? "Overall Feedback" : "My Feedback"}
-        subtitle={isAdmin ? "Student feedback and ratings across all campus courses and faculty" : "Student feedback and ratings for your courses"}
+        title={isAdmin ? (programLevel === "INTERMEDIATE" ? "Intermediate (HSSC) Feedback" : "BS Programs Feedback") : "My Feedback"}
+        subtitle={isAdmin ? (programLevel === "INTERMEDIATE" ? "Intermediate student feedback and ratings across all courses and faculty" : "BS student feedback and ratings across all campus courses and faculty") : "Student feedback and ratings for your courses"}
         breadcrumbs={[
           { label: "Dashboard", href: "/dashboard" },
           { label: "Feedback" },
