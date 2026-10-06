@@ -47,6 +47,8 @@ import {
   formatCourseCode,
   getSubjectSetFilterConfig,
   type DisciplineItem,
+  setCachedCustomDisciplines,
+  setCachedSubjectSetsMap,
 } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -253,14 +255,29 @@ export default function ManageCoursesPage() {
   }, [disciplines]);
 
   useEffect(() => {
+    if (disciplines.length > 0) {
+      setCachedCustomDisciplines(disciplines.map((d) => d.name));
+      const setsMap: Record<string, readonly string[]> = {};
+      disciplines.forEach((d) => {
+        setsMap[d.name] = d.subjectSets;
+      });
+      setCachedSubjectSetsMap(setsMap);
+    }
+  }, [disciplines]);
+
+  useEffect(() => {
     if (programLevel === "INTERMEDIATE") {
       setSelectedDept("F.Sc Pre-Engineering");
       setSelectedSem(1);
       setSelectedSet("all");
+      setPurgeDept("F.Sc Pre-Engineering");
+      setPurgeSem("1");
     } else {
       setSelectedDept("Computer Science");
       setSelectedSem(1);
       setSelectedSet("all");
+      setPurgeDept("Computer Science");
+      setPurgeSem("1");
     }
   }, [programLevel]);
 
@@ -297,33 +314,42 @@ export default function ManageCoursesPage() {
   const [purgeDept, setPurgeDept] = useState<string>("Computer Science");
   const [purgeSem, setPurgeSem] = useState<string>("1");
   const [purgeConfirmInput, setPurgeConfirmInput] = useState("");
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const targetCoursesCount = courses.filter((c) => {
     if (purgeScope === "entire") return true;
-    if (purgeScope === "department") return c.department === purgeDept;
-    if (purgeScope === "specific") return c.department === purgeDept && c.semester === Number(purgeSem);
+    const matchesDept =
+      (c.department && c.department.toLowerCase() === purgeDept.toLowerCase()) ||
+      (c.discipline && c.discipline.toLowerCase() === purgeDept.toLowerCase());
+    if (purgeScope === "department") return matchesDept;
+    if (purgeScope === "specific") {
+      const matchesSem = Number(c.semester) === Number(purgeSem) || Number(c.part) === Number(purgeSem);
+      return matchesDept && matchesSem;
+    }
     return false;
   }).length;
 
   const handleDeleteAllCourses = async () => {
     setDeletingAll(true);
     try {
-      let url = "/api/courses";
+      let url = `/api/courses?programLevel=${programLevel}`;
       if (purgeScope === "entire") {
-        url += "?all=true";
+        url += "&all=true";
       } else if (purgeScope === "department") {
-        url += `?department=${encodeURIComponent(purgeDept)}&semester=all`;
+        url += `&department=${encodeURIComponent(purgeDept)}&semester=all`;
       } else {
-        url += `?department=${encodeURIComponent(purgeDept)}&semester=${purgeSem}`;
+        url += `&department=${encodeURIComponent(purgeDept)}&semester=${purgeSem}`;
       }
 
-      await api.delete(url);
+      const res = await api.delete<{ message?: string; deletedCount?: number; skippedCount?: number }>(url);
       setDeleteAllDialogOpen(false);
       setPurgeConfirmInput("");
+      setSuccessBanner(res.data?.message || "Purged courses successfully.");
       handleRefresh();
       router.refresh();
-    } catch (err) {
-      console.error("Failed to bulk delete courses:", err);
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string; message?: string } } };
+      alert(axiosErr?.response?.data?.error || axiosErr?.response?.data?.message || "Failed to bulk delete courses.");
     } finally {
       setDeletingAll(false);
     }
@@ -331,16 +357,27 @@ export default function ManageCoursesPage() {
 
   const handleDownloadTemplate = () => {
     const csvContent =
-      "courseCode,courseName,creditHours,department,semester,shift\n" +
-      "CS-301,Database Systems,3,Computer Science,3,Morning\n" +
-      "CS-302,Data Structures & Algorithms,4,Computer Science,3,Morning\n" +
-      "MTH-101,Calculus & Analytical Geometry,3,Mathematics,1,Morning\n" +
-      "PHY-201,Applied Physics,3,Physics,2,Morning\n";
+      programLevel === "INTERMEDIATE"
+        ? "courseCode,courseName,creditHours,department,semester,shift\n" +
+          "PHY-11,Physics,3,F.Sc Pre-Engineering,1,Morning\n" +
+          "CHM-11,Chemistry,3,F.Sc Pre-Engineering,1,Morning\n" +
+          "CS-11,Computer Science,3,ICS,1,Morning\n" +
+          "ENG-11,English,3,F.Sc Pre-Engineering,1,Morning\n"
+        : "courseCode,courseName,creditHours,department,semester,shift\n" +
+          "CS-301,Database Systems,3,Computer Science,3,Morning\n" +
+          "CS-302,Data Structures & Algorithms,4,Computer Science,3,Morning\n" +
+          "MTH-101,Calculus & Analytical Geometry,3,Mathematics,1,Morning\n" +
+          "PHY-201,Applied Physics,3,Physics,2,Morning\n";
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", "courses_sample_template.csv");
+    link.setAttribute(
+      "download",
+      programLevel === "INTERMEDIATE"
+        ? "intermediate_courses_sample_template.csv"
+        : "courses_sample_template.csv"
+    );
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -361,10 +398,12 @@ export default function ManageCoursesPage() {
     const col = (name: string): number => headers.indexOf(name);
 
     const existingSet = new Set(
-      courses.map((c) => `${c.courseCode.toUpperCase()}|${c.department.toLowerCase()}`)
+      courses.map((c) => `${c.courseCode.toUpperCase()}|${(c.department || c.discipline || "").toLowerCase()}`)
     );
     const batchSet = new Set<string>();
     const rows: typeof previewRows = [];
+    const maxTerms = programLevel === "INTERMEDIATE" ? 2 : 8;
+    const validDepts = programLevel === "INTERMEDIATE" ? activeDisciplinesList : DEPARTMENTS;
 
     for (let i = 1; i < lines.length; i++) {
       const cells = parseCSVRow(lines[i]);
@@ -372,7 +411,8 @@ export default function ManageCoursesPage() {
 
       const code = get("coursecode");
       const name = get("coursename");
-      const credits = Number(get("credithours"));
+      const creditsRaw = get("credithours");
+      const credits = creditsRaw ? Number(creditsRaw) : (programLevel === "INTERMEDIATE" ? 3 : NaN);
       const dept = get("department");
       const sem = Number(get("semester"));
       const shift = get("shift") || "Morning";
@@ -388,12 +428,12 @@ export default function ManageCoursesPage() {
       } else if (!Number.isInteger(credits) || credits < 1 || credits > 6) {
         status = "invalid_credits";
         reason = "Credits must be 1-6";
-      } else if (!Number.isInteger(sem) || sem < 1 || sem > 8) {
+      } else if (!Number.isInteger(sem) || sem < 1 || sem > maxTerms) {
         status = "invalid_sem";
-        reason = "Semester must be 1-8";
-      } else if (!DEPARTMENTS.some((d) => d.toLowerCase() === dept.toLowerCase())) {
+        reason = programLevel === "INTERMEDIATE" ? "Part must be 1 or 2" : "Semester must be 1-8";
+      } else if (!validDepts.some((d) => d.toLowerCase() === dept.toLowerCase())) {
         status = "invalid_dept";
-        reason = "Unknown department";
+        reason = programLevel === "INTERMEDIATE" ? "Unknown discipline" : "Unknown department";
       } else if (existingSet.has(pairKey) || batchSet.has(pairKey)) {
         status = "duplicate";
         reason = existingSet.has(pairKey) ? "Code exists in department" : "Duplicate code in batch";
@@ -431,38 +471,37 @@ export default function ManageCoursesPage() {
   };
 
   const handleConfirmImport = async () => {
-    if (!bulkFile && previewRows.length === 0) return;
+    const validCourses = previewRows
+      .filter((r) => r.status === "valid")
+      .map((r) => ({
+        courseCode: r.courseCode,
+        courseName: r.courseName,
+        creditHours: r.creditHours,
+        department: r.department,
+        semester: r.semester,
+        shift: r.shift,
+        programLevel,
+        ...(programLevel === "INTERMEDIATE" ? { discipline: r.department, part: r.semester } : {}),
+      }));
+
+    if (validCourses.length === 0) return;
     setImportingBulk(true);
     setBulkResult(null);
     try {
-      if (inputMode === "file" && bulkFile) {
-        const formData = new FormData();
-        formData.append("file", bulkFile);
-        const { data } = await api.post("/api/courses/import", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
-        setBulkResult(data);
-      } else {
-        const validCourses = previewRows
-          .filter((r) => r.status === "valid")
-          .map((r) => ({
-            courseCode: r.courseCode,
-            courseName: r.courseName,
-            creditHours: r.creditHours,
-            department: r.department,
-            semester: r.semester,
-            shift: r.shift,
-          }));
-
-        const { data } = await api.post("/api/courses/import", { courses: validCourses });
-        setBulkResult(data);
-      }
+      const { data } = await api.post<{ message?: string; importedCount?: number }>(
+        "/api/courses/import",
+        { courses: validCourses }
+      );
+      setBulkResult({
+        imported: data.importedCount ?? validCourses.length,
+        skipped: [],
+      });
       handleRefresh();
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { error?: string } } };
+      const axiosErr = err as { response?: { data?: { error?: string; message?: string } } };
       setBulkResult({
         imported: 0,
-        skipped: [{ row: 0, reason: axiosErr?.response?.data?.error || "Import failed" }],
+        skipped: [{ row: 0, reason: axiosErr?.response?.data?.error || axiosErr?.response?.data?.message || "Import failed" }],
       });
     } finally {
       setImportingBulk(false);
@@ -705,14 +744,21 @@ export default function ManageCoursesPage() {
   const handleDelete = async () => {
     if (!deletingCourse) return;
     setSaving(true);
+    setDeleteError(null);
     try {
       await api.delete(`/api/courses/${deletingCourse.id}`);
       setCourses((prev) => prev.filter((c) => c.id !== deletingCourse.id));
       setDeleteDialogOpen(false);
       setDeletingCourse(null);
+      setDeleteError(null);
       router.refresh();
-    } catch {
-      /* ignore */
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string; message?: string } } };
+      const msg =
+        axiosErr?.response?.data?.error ||
+        axiosErr?.response?.data?.message ||
+        "Failed to delete subject. It may have student enrollments or grade records attached.";
+      setDeleteError(msg);
     } finally {
       setSaving(false);
     }
@@ -1010,6 +1056,7 @@ export default function ManageCoursesPage() {
           <button
             onClick={() => {
               setDeletingCourse(row);
+              setDeleteError(null);
               setDeleteDialogOpen(true);
             }}
             className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-destructive/10 transition-colors"
@@ -1658,7 +1705,13 @@ export default function ManageCoursesPage() {
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+      <Dialog
+        open={deleteDialogOpen}
+        onOpenChange={(open) => {
+          setDeleteDialogOpen(open);
+          if (!open) setDeleteError(null);
+        }}
+      >
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
             <DialogTitle>Delete Subject</DialogTitle>
@@ -1667,11 +1720,20 @@ export default function ManageCoursesPage() {
               <strong>{deletingCourse?.courseName}</strong>? This will remove it from all student enrollments.
             </DialogDescription>
           </DialogHeader>
+          {deleteError && (
+            <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-xs font-semibold flex items-center gap-2 animate-in fade-in">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>{deleteError}</span>
+            </div>
+          )}
           <DialogFooter>
             <Button
               variant="outline"
               disabled={saving}
-              onClick={() => setDeleteDialogOpen(false)}
+              onClick={() => {
+                setDeleteDialogOpen(false);
+                setDeleteError(null);
+              }}
             >
               Cancel
             </Button>
@@ -2022,18 +2084,20 @@ export default function ManageCoursesPage() {
                 />
                 <div className="flex-1 space-y-2">
                   <span className="font-semibold text-foreground block">
-                    Specific Department & Semester
+                    {programLevel === "INTERMEDIATE" ? "Specific Discipline & Part" : "Specific Department & Semester"}
                   </span>
                   {purgeScope === "specific" && (
                     <div className="grid grid-cols-2 gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
                       <div>
-                        <Label className="text-[10px] text-muted-foreground block mb-1">Department</Label>
+                        <Label className="text-[10px] text-muted-foreground block mb-1">
+                          {programLevel === "INTERMEDIATE" ? "Discipline" : "Department"}
+                        </Label>
                         <Select value={purgeDept} onValueChange={setPurgeDept}>
                           <SelectTrigger className="h-8 text-xs bg-card">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {DEPARTMENTS.map((d) => (
+                            {activeDisciplinesList.map((d) => (
                               <SelectItem key={d} value={d}>
                                 {d}
                               </SelectItem>
@@ -2042,15 +2106,17 @@ export default function ManageCoursesPage() {
                         </Select>
                       </div>
                       <div>
-                        <Label className="text-[10px] text-muted-foreground block mb-1">Semester</Label>
+                        <Label className="text-[10px] text-muted-foreground block mb-1">
+                          {programLevel === "INTERMEDIATE" ? "Part" : "Semester"}
+                        </Label>
                         <Select value={purgeSem} onValueChange={setPurgeSem}>
                           <SelectTrigger className="h-8 text-xs bg-card">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+                            {getTermOptionsForLevel(programLevel).map((s) => (
                               <SelectItem key={s} value={String(s)}>
-                                Semester {s}
+                                {formatTermLabel(programLevel, s)}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -2072,17 +2138,21 @@ export default function ManageCoursesPage() {
                 />
                 <div className="flex-1 space-y-2">
                   <span className="font-semibold text-foreground block">
-                    Entire Department (All 8 Semesters)
+                    {programLevel === "INTERMEDIATE"
+                      ? "Entire Discipline (Both Parts)"
+                      : "Entire Department (All 8 Semesters)"}
                   </span>
                   {purgeScope === "department" && (
                     <div className="pt-1" onClick={(e) => e.stopPropagation()}>
-                      <Label className="text-[10px] text-muted-foreground block mb-1">Department</Label>
+                      <Label className="text-[10px] text-muted-foreground block mb-1">
+                        {programLevel === "INTERMEDIATE" ? "Discipline" : "Department"}
+                      </Label>
                       <Select value={purgeDept} onValueChange={setPurgeDept}>
                         <SelectTrigger className="h-8 text-xs bg-card w-full">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {DEPARTMENTS.map((d) => (
+                          {activeDisciplinesList.map((d) => (
                             <SelectItem key={d} value={d}>
                               {d}
                             </SelectItem>
@@ -2094,7 +2164,7 @@ export default function ManageCoursesPage() {
                 </div>
               </label>
 
-              {/* Option 3: Entire College */}
+              {/* Option 3: Entire College / Program */}
               <label className="flex items-start gap-3 p-3 rounded-xl bg-card border border-border cursor-pointer hover:bg-accent/40 transition-colors">
                 <input
                   type="radio"
@@ -2105,10 +2175,14 @@ export default function ManageCoursesPage() {
                 />
                 <div>
                   <span className="font-semibold text-rose-600 dark:text-rose-400 block">
-                    ALL Departments & ALL Semesters (Entire College)
+                    {programLevel === "INTERMEDIATE"
+                      ? "ALL Intermediate Disciplines & Parts"
+                      : "ALL BS Departments & Semesters"}
                   </span>
                   <span className="text-[11px] text-muted-foreground block mt-0.5">
-                    Deletes every single subject across all departments in the portal.
+                    {programLevel === "INTERMEDIATE"
+                      ? "Deletes every single Intermediate course across all disciplines."
+                      : "Deletes every single BS course across all departments in the portal."}
                   </span>
                 </div>
               </label>

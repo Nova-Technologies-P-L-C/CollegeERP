@@ -46,13 +46,78 @@ export interface DisciplineItem {
   isDefault?: boolean;
 }
 
+let _cachedCustomDisciplines: string[] = [];
+let _cachedSubjectSetsMap: Record<string, readonly string[]> = {};
+
+export function setCachedCustomDisciplines(disciplines: string[]): void {
+  _cachedCustomDisciplines = disciplines;
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.setItem("custom_intermediate_disciplines", JSON.stringify(disciplines));
+    } catch {
+      // ignore
+    }
+  }
+}
+
+export function getCachedCustomDisciplines(): string[] {
+  if (_cachedCustomDisciplines.length > 0) {
+    return _cachedCustomDisciplines;
+  }
+  if (typeof window !== "undefined") {
+    try {
+      const stored = localStorage.getItem("custom_intermediate_disciplines");
+      if (stored) {
+        _cachedCustomDisciplines = JSON.parse(stored);
+        return _cachedCustomDisciplines;
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return [];
+}
+
+export function setCachedSubjectSetsMap(setsMap: Record<string, readonly string[]>): void {
+  _cachedSubjectSetsMap = setsMap;
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.setItem("custom_intermediate_subject_sets", JSON.stringify(setsMap));
+    } catch {
+      // ignore
+    }
+  }
+}
+
+export function getCachedSubjectSetsMap(): Record<string, readonly string[]> {
+  if (Object.keys(_cachedSubjectSetsMap).length > 0) {
+    return _cachedSubjectSetsMap;
+  }
+  if (typeof window !== "undefined") {
+    try {
+      const stored = localStorage.getItem("custom_intermediate_subject_sets");
+      if (stored) {
+        _cachedSubjectSetsMap = JSON.parse(stored);
+        return _cachedSubjectSetsMap;
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return {};
+}
+
 export function getDisciplinesForLevel(
   level: "BS" | "INTERMEDIATE" | string,
   customDisciplines?: string[] | readonly string[]
 ): readonly string[] {
   if (level === "INTERMEDIATE") {
-    if (customDisciplines && customDisciplines.length > 0) {
-      return Array.from(new Set([...INTERMEDIATE_DISCIPLINES, ...customDisciplines]));
+    const customs =
+      customDisciplines && customDisciplines.length > 0
+        ? customDisciplines
+        : getCachedCustomDisciplines();
+    if (customs && customs.length > 0) {
+      return Array.from(new Set([...INTERMEDIATE_DISCIPLINES, ...customs]));
     }
     return INTERMEDIATE_DISCIPLINES;
   }
@@ -80,8 +145,9 @@ export function getSubjectSetsForDiscipline(
   discipline: string,
   customSetsMap?: Record<string, readonly string[]>
 ): readonly string[] {
-  if (customSetsMap && customSetsMap[discipline]) {
-    return customSetsMap[discipline];
+  const map = customSetsMap || getCachedSubjectSetsMap();
+  if (map && map[discipline]) {
+    return map[discipline];
   }
   return INTERMEDIATE_SUBJECT_SETS[discipline] || ["Set 1"];
 }

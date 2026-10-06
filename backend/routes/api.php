@@ -56,6 +56,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/courses', [CourseController::class, 'store'])->middleware('role:ADMIN');
     Route::patch('/courses/{id}', [CourseController::class, 'update'])->middleware('role:ADMIN,FACULTY');
     Route::put('/courses/{id}', [CourseController::class, 'update'])->middleware('role:ADMIN,FACULTY');
+    Route::delete('/courses', [CourseController::class, 'bulkDestroy'])->middleware('role:ADMIN');
     Route::delete('/courses/{id}', [CourseController::class, 'destroy'])->middleware('role:ADMIN');
 
     // Disciplines (Intermediate Academic Programs)

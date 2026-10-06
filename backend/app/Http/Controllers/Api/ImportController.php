@@ -18,19 +18,39 @@ class ImportController extends Controller
             'courses' => 'required|array|min:1',
             'courses.*.courseCode' => 'required|string',
             'courses.*.courseName' => 'required|string',
-            'courses.*.creditHours' => 'required|integer',
+            'courses.*.creditHours' => 'nullable|integer',
             'courses.*.department' => 'required|string',
             'courses.*.semester' => 'nullable|integer',
             'courses.*.programLevel' => 'nullable|string',
             'courses.*.discipline' => 'nullable|string',
+            'courses.*.part' => 'nullable|integer',
+            'courses.*.subjectSet' => 'nullable|string',
         ]);
 
         $created = 0;
         foreach ($validated['courses'] as $c) {
+            $code = strtoupper(trim($c['courseCode']));
+            $dept = trim($c['department']);
+            $level = $c['programLevel'] ?? 'BS';
+
+            $c['courseCode'] = $code;
+            $c['department'] = $dept;
+            $c['creditHours'] = !empty($c['creditHours']) ? (int) $c['creditHours'] : 3;
+            $c['programLevel'] = $level;
+
+            if ($level === 'INTERMEDIATE') {
+                if (empty($c['discipline'])) {
+                    $c['discipline'] = $dept;
+                }
+                if (empty($c['part'])) {
+                    $c['part'] = $c['semester'] ?? 1;
+                }
+            }
+
             Course::updateOrCreate(
                 [
-                    'courseCode' => $c['courseCode'],
-                    'department' => $c['department'],
+                    'courseCode' => $code,
+                    'department' => $dept,
                 ],
                 $c
             );

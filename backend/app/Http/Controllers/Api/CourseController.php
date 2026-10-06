@@ -275,7 +275,16 @@ class CourseController extends Controller
         $courseName = $course->courseName;
         $level = $course->programLevel ?? 'BS';
 
-        $course->delete();
+        try {
+            $course->delete();
+        } catch (\Illuminate\Database\QueryException $e) {
+            if (str_contains($e->getMessage(), '23503') || str_contains($e->getMessage(), 'foreign key')) {
+                return response()->json([
+                    'error' => "Cannot delete course '{$courseName}' ({$courseCode}) because active student enrollments, attendance, or grade records exist for it."
+                ], 422);
+            }
+            throw $e;
+        }
 
         AuditLogService::log(
             'DELETED',
@@ -288,5 +297,69 @@ class CourseController extends Controller
         );
 
         return response()->json(['message' => 'Course deleted successfully']);
+    }
+
+    public function bulkDestroy(Request $request)
+    {
+        $user = $request->attributes->get('user') ?? auth()->user();
+
+        $query = Course::query();
+
+        if ($request->filled('programLevel')) {
+            $query->where('programLevel', $request->query('programLevel'));
+        }
+
+        if ($request->filled('department')) {
+            $dept = $request->query('department');
+            $query->where(function ($q) use ($dept) {
+                $q->where('department', $dept)
+                  ->orWhere('discipline', $dept);
+            });
+        }
+
+        if ($request->filled('semester') && $request->query('semester') !== 'all') {
+            $sem = (int) $request->query('semester');
+            $query->where(function ($q) use ($sem) {
+                $q->where('semester', $sem)
+                  ->orWhere('part', $sem);
+            });
+        }
+
+        $courses = $query->get();
+        if ($courses->isEmpty()) {
+            return response()->json([
+                'message' => 'No courses matched the purge criteria.',
+                'deletedCount' => 0,
+                'skippedCount' => 0,
+            ]);
+        }
+
+        $deleted = 0;
+        $skipped = 0;
+
+        foreach ($courses as $c) {
+            try {
+                $c->delete();
+                $deleted++;
+            } catch (\Exception $e) {
+                $skipped++;
+            }
+        }
+
+        AuditLogService::log(
+            'DELETED',
+            'Course',
+            'bulk-purge',
+            "Purged {$deleted} courses (skipped {$skipped})",
+            $user->clerkId ?? null,
+            $user->name ?? null,
+            $request->query('programLevel', 'BS')
+        );
+
+        return response()->json([
+            'message' => "Successfully purged {$deleted} course(s)" . ($skipped > 0 ? " ({$skipped} skipped due to active student records)" : "."),
+            'deletedCount' => $deleted,
+            'skippedCount' => $skipped,
+        ]);
     }
 }
