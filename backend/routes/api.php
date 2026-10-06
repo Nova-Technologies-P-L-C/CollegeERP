@@ -23,6 +23,7 @@ use App\Http\Controllers\Api\EnrollmentController;
 use App\Http\Controllers\Api\OnboardingController;
 use App\Http\Controllers\Api\ImportController;
 use App\Http\Controllers\Api\SettingsController;
+use App\Http\Controllers\Api\DisciplineController;
 use App\Http\Controllers\Api\BranchController;
 
 // Public Endpoints
@@ -56,6 +57,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/courses/{id}', [CourseController::class, 'update'])->middleware('role:ADMIN,FACULTY');
     Route::put('/courses/{id}', [CourseController::class, 'update'])->middleware('role:ADMIN,FACULTY');
     Route::delete('/courses/{id}', [CourseController::class, 'destroy'])->middleware('role:ADMIN');
+
+    // Disciplines (Intermediate Academic Programs)
+    Route::get('/disciplines', [DisciplineController::class, 'index']);
+    Route::post('/disciplines', [DisciplineController::class, 'store'])->middleware('role:ADMIN');
+    Route::delete('/disciplines/{name}', [DisciplineController::class, 'destroy'])->middleware('role:ADMIN');
 
     // Students
     Route::get('/students', [StudentController::class, 'index'])->middleware('role:ADMIN,REGISTRAR,FACULTY,ACCOUNTANT');

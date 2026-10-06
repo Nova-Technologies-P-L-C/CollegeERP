@@ -39,17 +39,24 @@ export const INTERMEDIATE_SUBJECT_SETS: Record<string, readonly string[]> = {
   "Home Economics": ["Set 1"],
 };
 
-export function getSubjectSetsForDiscipline(discipline: string): readonly string[] {
-  return INTERMEDIATE_SUBJECT_SETS[discipline] || ["Set 1"];
+export interface DisciplineItem {
+  name: string;
+  subjectSets: string[];
+  description?: string;
+  isDefault?: boolean;
 }
 
-export const PROGRAM_LEVELS = ["BS", "INTERMEDIATE"] as const;
-export type ProgramLevelType = (typeof PROGRAM_LEVELS)[number];
-
-export const INTERMEDIATE_PARTS = [1, 2] as const;
-
-export function getDisciplinesForLevel(level: "BS" | "INTERMEDIATE" | string): readonly string[] {
-  return level === "INTERMEDIATE" ? INTERMEDIATE_DISCIPLINES : DEPARTMENTS;
+export function getDisciplinesForLevel(
+  level: "BS" | "INTERMEDIATE" | string,
+  customDisciplines?: string[] | readonly string[]
+): readonly string[] {
+  if (level === "INTERMEDIATE") {
+    if (customDisciplines && customDisciplines.length > 0) {
+      return Array.from(new Set([...INTERMEDIATE_DISCIPLINES, ...customDisciplines]));
+    }
+    return INTERMEDIATE_DISCIPLINES;
+  }
+  return DEPARTMENTS;
 }
 
 export function getTermOptionsForLevel(level: "BS" | "INTERMEDIATE" | string): readonly number[] {
@@ -69,8 +76,21 @@ export interface SubjectSetFilterConfig {
   availableSets: readonly string[];
 }
 
-export function getSubjectSetFilterConfig(discipline: string): SubjectSetFilterConfig {
-  const sets = getSubjectSetsForDiscipline(discipline);
+export function getSubjectSetsForDiscipline(
+  discipline: string,
+  customSetsMap?: Record<string, readonly string[]>
+): readonly string[] {
+  if (customSetsMap && customSetsMap[discipline]) {
+    return customSetsMap[discipline];
+  }
+  return INTERMEDIATE_SUBJECT_SETS[discipline] || ["Set 1"];
+}
+
+export function getSubjectSetFilterConfig(
+  discipline: string,
+  customSetsMap?: Record<string, readonly string[]>
+): SubjectSetFilterConfig {
+  const sets = getSubjectSetsForDiscipline(discipline, customSetsMap);
   return {
     defaultSet: "Set 1",
     hasMultipleSets: sets.length > 1,

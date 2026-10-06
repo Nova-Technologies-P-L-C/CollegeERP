@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/axios";
 import {
@@ -31,6 +31,9 @@ import {
   Sun,
   Moon,
   X,
+  Settings2,
+  Layers,
+  Lock,
 } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { DataTable, Column } from "@/components/dashboard/DataTable";
@@ -43,6 +46,7 @@ import {
   getSubjectSetsForDiscipline,
   formatCourseCode,
   getSubjectSetFilterConfig,
+  type DisciplineItem,
 } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -220,6 +224,33 @@ export default function ManageCoursesPage() {
   const [selectedDept, setSelectedDept] = useState<string | null>("Computer Science");
   const [selectedSem, setSelectedSem] = useState<number | null>(1);
   const [selectedSet, setSelectedSet] = useState<string | null>("all");
+
+  // Dynamic Disciplines management (Intermediate)
+  const [disciplines, setDisciplines] = useState<DisciplineItem[]>([]);
+  const [manageDisciplinesOpen, setManageDisciplinesOpen] = useState(false);
+  const [newDisciplineName, setNewDisciplineName] = useState("");
+  const [newDisciplineSetsCount, setNewDisciplineSetsCount] = useState<number>(1);
+  const [disciplineError, setDisciplineError] = useState<string | null>(null);
+  const [creatingDiscipline, setCreatingDiscipline] = useState(false);
+  const [deletingDisciplineName, setDeletingDisciplineName] = useState<string | null>(null);
+
+  const activeDisciplinesList = useMemo(() => {
+    if (programLevel !== "INTERMEDIATE") {
+      return getDisciplinesForLevel("BS");
+    }
+    if (disciplines.length > 0) {
+      return disciplines.map((d) => d.name);
+    }
+    return getDisciplinesForLevel("INTERMEDIATE");
+  }, [programLevel, disciplines]);
+
+  const customSubjectSetsMap = useMemo(() => {
+    const map: Record<string, readonly string[]> = {};
+    disciplines.forEach((d) => {
+      map[d.name] = d.subjectSets;
+    });
+    return map;
+  }, [disciplines]);
 
   useEffect(() => {
     if (programLevel === "INTERMEDIATE") {
@@ -449,17 +480,86 @@ export default function ManageCoursesPage() {
 
   const handleRefresh = useCallback(() => {
     setLoading(true);
-    Promise.all([
+    const promises: Promise<unknown>[] = [
       api.get<CourseWithDetails[]>(`/api/courses?programLevel=${programLevel}`),
       api.get<FacultyOption[]>(`/api/faculty?programLevel=${programLevel}`),
-    ])
-      .then(([c, f]) => {
-        setCourses(Array.isArray(c.data) ? c.data : []);
-        setFacultyList(Array.isArray(f.data) ? f.data : []);
+    ];
+    if (programLevel === "INTERMEDIATE") {
+      promises.push(api.get<{ disciplines: DisciplineItem[] }>("/api/disciplines"));
+    }
+
+    Promise.all(promises)
+      .then(([c, f, d]) => {
+        setCourses(Array.isArray((c as { data: CourseWithDetails[] })?.data) ? (c as { data: CourseWithDetails[] }).data : []);
+        setFacultyList(Array.isArray((f as { data: FacultyOption[] })?.data) ? (f as { data: FacultyOption[] }).data : []);
+        if (d && (d as { data: { disciplines?: DisciplineItem[] } })?.data?.disciplines) {
+          setDisciplines((d as { data: { disciplines: DisciplineItem[] } }).data.disciplines);
+        }
         setLoading(false);
       })
       .catch(() => setLoading(false));
   }, [programLevel]);
+
+  const handleCreateDiscipline = async () => {
+    setDisciplineError(null);
+    if (!newDisciplineName.trim()) {
+      setDisciplineError("Discipline name is required (e.g. Pre-Agriculture or General Science).");
+      return;
+    }
+
+    setCreatingDiscipline(true);
+    try {
+      const res = await api.post<{ message: string; discipline: DisciplineItem; disciplines: DisciplineItem[] }>(
+        "/api/disciplines",
+        {
+          name: newDisciplineName.trim(),
+          subjectSetsCount: newDisciplineSetsCount,
+        }
+      );
+      if (res.data?.disciplines) {
+        setDisciplines(res.data.disciplines);
+      }
+      setSuccessBanner(`Discipline "${newDisciplineName.trim()}" added successfully!`);
+      setNewDisciplineName("");
+      setNewDisciplineSetsCount(1);
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string; message?: string } } };
+      setDisciplineError(
+        axiosErr?.response?.data?.error ||
+        axiosErr?.response?.data?.message ||
+        "Failed to create discipline. Please ensure the name is unique."
+      );
+    } finally {
+      setCreatingDiscipline(false);
+    }
+  };
+
+  const handleDeleteDiscipline = async (name: string) => {
+    setDisciplineError(null);
+    setDeletingDisciplineName(name);
+    try {
+      const res = await api.delete<{ message: string; disciplines: DisciplineItem[] }>(
+        `/api/disciplines/${encodeURIComponent(name)}`
+      );
+      if (res.data?.disciplines) {
+        setDisciplines(res.data.disciplines);
+      }
+      if (selectedDept === name) {
+        setSelectedDept(null);
+        setSelectedSem(null);
+      }
+      setSuccessBanner(`Discipline "${name}" deleted successfully.`);
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string; message?: string } } };
+      setDisciplineError(
+        axiosErr?.response?.data?.error ||
+        axiosErr?.response?.data?.message ||
+        `Failed to delete discipline "${name}".`
+      );
+    } finally {
+      setDeletingDisciplineName(null);
+    }
+  };
 
   useEffect(() => {
     handleRefresh();
@@ -933,7 +1033,7 @@ export default function ManageCoursesPage() {
       !selectedSem || Number(c.semester) === Number(selectedSem) || Number(c.part) === Number(selectedSem);
 
     if (programLevel === "INTERMEDIATE") {
-      const setConfig = getSubjectSetFilterConfig(selectedDept || "");
+      const setConfig = getSubjectSetFilterConfig(selectedDept || "", customSubjectSetsMap);
       const activeSet = setConfig.hasMultipleSets ? (selectedSet || "all") : "all";
       if (!activeSet || activeSet === "all") return matchesDept && matchesSem;
       const matchesSet =
@@ -1014,6 +1114,20 @@ export default function ManageCoursesPage() {
                     <RefreshCw className="h-4 w-4" />
                     Refresh
                   </Button>
+                  {programLevel === "INTERMEDIATE" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setDisciplineError(null);
+                        setManageDisciplinesOpen(true);
+                      }}
+                      className="flex items-center gap-2 border border-border bg-card h-9 px-3.5 rounded-xl cursor-pointer hover:bg-accent hover:text-accent-foreground transition-all"
+                    >
+                      <Settings2 className="h-4 w-4 text-brand-primary" />
+                      Manage Disciplines
+                    </Button>
+                  )}
                   <Button
                     onClick={openAdd}
                     className="bg-brand-primary hover:bg-brand-primary/90 text-white h-9 px-4 rounded-xl flex items-center gap-2 cursor-pointer shadow-sm"
@@ -1025,7 +1139,7 @@ export default function ManageCoursesPage() {
             />
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {getDisciplinesForLevel(programLevel).map((dept) => {
+              {activeDisciplinesList.map((dept) => {
                 const meta = departmentMeta[dept] || defaultMeta;
                 const Icon = meta.icon;
                 const deptCount = courses.filter((c) =>
@@ -1214,7 +1328,7 @@ export default function ManageCoursesPage() {
                       <SelectValue placeholder={programLevel === "INTERMEDIATE" ? "Select Discipline" : "Select Department"} />
                     </SelectTrigger>
                     <SelectContent>
-                      {getDisciplinesForLevel(programLevel).map((d) => (
+                      {activeDisciplinesList.map((d) => (
                         <SelectItem key={d} value={d}>
                           {d}
                         </SelectItem>
@@ -1244,7 +1358,7 @@ export default function ManageCoursesPage() {
                   </Select>
                 </div>
 
-                {programLevel === "INTERMEDIATE" && getSubjectSetFilterConfig(selectedDept || "").hasMultipleSets && (
+                {programLevel === "INTERMEDIATE" && getSubjectSetFilterConfig(selectedDept || "", customSubjectSetsMap).hasMultipleSets && (
                   <div className="flex items-center gap-2">
                     <Label className="text-xs font-semibold text-muted-foreground uppercase">Subject Set:</Label>
                     <Select value={selectedSet || "all"} onValueChange={setSelectedSet}>
@@ -1253,7 +1367,7 @@ export default function ManageCoursesPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All Sets</SelectItem>
-                        {getSubjectSetFilterConfig(selectedDept || "").availableSets.map((set) => (
+                        {getSubjectSetFilterConfig(selectedDept || "", customSubjectSetsMap).availableSets.map((set) => (
                           <SelectItem key={set} value={set}>
                             {set}
                           </SelectItem>
@@ -1365,7 +1479,7 @@ export default function ManageCoursesPage() {
                     <SelectValue placeholder={programLevel === "INTERMEDIATE" ? "Select discipline" : "Select department"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {getDisciplinesForLevel(programLevel).map((d) => (
+                    {activeDisciplinesList.map((d) => (
                       <SelectItem key={d} value={d}>
                         {d}
                       </SelectItem>
@@ -1404,7 +1518,7 @@ export default function ManageCoursesPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {getSubjectSetsForDiscipline(form.department || selectedDept || "").map((set) => (
+                      {getSubjectSetsForDiscipline(form.department || selectedDept || "", customSubjectSetsMap).map((set) => (
                         <SelectItem key={set} value={set}>
                           {set}
                         </SelectItem>
@@ -2045,6 +2159,185 @@ export default function ManageCoursesPage() {
               ) : (
                 `Purge ${targetCoursesCount} Course(s)`
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manage Disciplines Dialog */}
+      <Dialog open={manageDisciplinesOpen} onOpenChange={setManageDisciplinesOpen}>
+        <DialogContent className="sm:max-w-[620px] max-h-[85vh] flex flex-col overflow-hidden">
+          <DialogHeader>
+            <div className="flex items-center gap-2 text-brand-primary">
+              <Layers className="h-5 w-5" />
+              <DialogTitle>Manage Academic Disciplines</DialogTitle>
+            </div>
+            <DialogDescription>
+              Add custom Intermediate disciplines or view standard BISE board programs and their subject sets.
+            </DialogDescription>
+          </DialogHeader>
+
+          {disciplineError && (
+            <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-xs font-semibold flex items-center gap-2 animate-in fade-in">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>{disciplineError}</span>
+            </div>
+          )}
+
+          <div className="flex-1 overflow-y-auto space-y-6 pr-1 py-2">
+            {/* Create Section */}
+            <div className="p-4 rounded-xl bg-muted/40 border border-border space-y-3">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
+                <Plus className="h-4 w-4 text-brand-primary" />
+                Add New Discipline
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2 space-y-1">
+                  <Label htmlFor="new-disc-name" className="text-xs">
+                    Discipline Name
+                  </Label>
+                  <Input
+                    id="new-disc-name"
+                    placeholder="e.g. Pre-Agriculture, General Science"
+                    value={newDisciplineName}
+                    onChange={(e) => setNewDisciplineName(e.target.value)}
+                    className="bg-card h-9 text-xs"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="new-disc-sets" className="text-xs">
+                    Subject Sets
+                  </Label>
+                  <Select
+                    value={String(newDisciplineSetsCount)}
+                    onValueChange={(v) => setNewDisciplineSetsCount(Number(v))}
+                  >
+                    <SelectTrigger id="new-disc-sets" className="bg-card h-9 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">1 Set (Set 1)</SelectItem>
+                      <SelectItem value="2">2 Sets (Set 1-2)</SelectItem>
+                      <SelectItem value="3">3 Sets (Set 1-3)</SelectItem>
+                      <SelectItem value="4">4 Sets (Set 1-4)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="flex justify-end pt-1">
+                <Button
+                  size="sm"
+                  onClick={handleCreateDiscipline}
+                  disabled={creatingDiscipline || !newDisciplineName.trim()}
+                  className="bg-brand-primary hover:bg-brand-primary/90 text-white h-8 px-4 text-xs rounded-lg flex items-center gap-1.5 cursor-pointer"
+                >
+                  {creatingDiscipline ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> Creating...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-3.5 w-3.5" /> Create Discipline
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {/* Existing Disciplines List */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  Active Disciplines ({activeDisciplinesList.length})
+                </h4>
+                <span className="text-[11px] text-muted-foreground">
+                  Standard Board & Custom Campus
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                {disciplines.length === 0 ? (
+                  <div className="p-4 rounded-xl border border-dashed border-border text-center text-xs text-muted-foreground">
+                    Loading disciplines...
+                  </div>
+                ) : (
+                  disciplines.map((d) => {
+                    const count = courses.filter(
+                      (c) =>
+                        (c.discipline && c.discipline.toLowerCase() === d.name.toLowerCase()) ||
+                        (c.department && c.department.toLowerCase() === d.name.toLowerCase())
+                    ).length;
+
+                    return (
+                      <div
+                        key={d.name}
+                        className="p-3 rounded-xl border border-border bg-card flex items-center justify-between gap-3 hover:border-brand-primary/20 transition-colors"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="h-8 w-8 rounded-lg bg-brand-primary/10 border border-brand-primary/20 flex items-center justify-center text-brand-primary shrink-0">
+                            <GraduationCap className="h-4 w-4" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-sm text-foreground truncate">
+                                {d.name}
+                              </span>
+                              {d.isDefault ? (
+                                <Badge variant="outline" className="text-[10px] py-0 px-1.5 h-4 font-normal bg-muted text-muted-foreground border-border shrink-0">
+                                  Standard Board
+                                </Badge>
+                              ) : (
+                                <Badge className="text-[10px] py-0 px-1.5 h-4 font-normal bg-brand-primary/15 text-brand-primary border-brand-primary/30 shrink-0">
+                                  Custom Branch
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              {d.subjectSets?.length || 1} Set{d.subjectSets?.length !== 1 ? "s" : ""} • {count} Subject{count !== 1 ? "s" : ""}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div>
+                          {d.isDefault ? (
+                            <span
+                              className="inline-flex items-center justify-center h-8 w-8 text-muted-foreground/40 cursor-not-allowed"
+                              title="Standard BISE board discipline cannot be removed"
+                            >
+                              <Lock className="h-4 w-4" />
+                            </span>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={deletingDisciplineName === d.name}
+                              onClick={() => handleDeleteDiscipline(d.name)}
+                              className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg cursor-pointer transition-colors"
+                              title={`Delete ${d.name}`}
+                            >
+                              {deletingDisciplineName === d.name ? (
+                                <Loader2 className="h-4 w-4 animate-spin text-destructive" />
+                              ) : (
+                                <Trash2 className="h-4 w-4" />
+                              )}
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="pt-2 border-t border-border">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setManageDisciplinesOpen(false)}
+            >
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>
