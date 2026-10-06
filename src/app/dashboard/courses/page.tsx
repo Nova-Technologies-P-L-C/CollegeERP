@@ -30,6 +30,7 @@ import {
   Clipboard,
   Sun,
   Moon,
+  X,
 } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { DataTable, Column } from "@/components/dashboard/DataTable";
@@ -205,6 +206,8 @@ export default function ManageCoursesPage() {
   const [assigning, setAssigning] = useState(false);
   const [unassigningShiftKey, setUnassigningShiftKey] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [dialogError, setDialogError] = useState<string | null>(null);
+  const [successBanner, setSuccessBanner] = useState<string | null>(null);
 
   // Detail Dialog states
   const [viewingCourse, setViewingCourse] = useState<CourseWithDetails | null>(null);
@@ -229,6 +232,13 @@ export default function ManageCoursesPage() {
       setSelectedSet("all");
     }
   }, [programLevel]);
+
+  useEffect(() => {
+    if (successBanner) {
+      const timer = setTimeout(() => setSuccessBanner(null), 6000);
+      return () => clearTimeout(timer);
+    }
+  }, [successBanner]);
 
   // Bulk Upload states
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
@@ -457,6 +467,7 @@ export default function ManageCoursesPage() {
 
   const openAdd = () => {
     setEditingCourse(null);
+    setDialogError(null);
     setForm({
       courseCode: "",
       courseName: "",
@@ -464,17 +475,18 @@ export default function ManageCoursesPage() {
       totalMarks: 100,
       department: selectedDept || (programLevel === "INTERMEDIATE" ? "F.Sc Pre-Engineering" : "Computer Science"),
       semester: selectedSem || 1,
-      subjectSet: selectedSet || "Set 1",
+      subjectSet: selectedSet && selectedSet !== "all" ? selectedSet : "Set 1",
     });
     setDialogOpen(true);
   };
 
   const openEdit = (c: CourseWithDetails) => {
     setEditingCourse(c);
+    setDialogError(null);
     setForm({
       courseCode: formatCourseCode(c.courseCode, programLevel),
       courseName: c.courseName,
-      creditHours: c.creditHours,
+      creditHours: c.creditHours || 3,
       totalMarks: c.totalMarks || 100,
       department: c.department || c.discipline || "Computer Science",
       semester: c.semester || c.part || 1,
@@ -500,40 +512,91 @@ export default function ManageCoursesPage() {
   };
 
   const handleSave = async () => {
-    if (!form.courseCode || !form.courseName || !form.department) return;
+    setDialogError(null);
+    if (!form.courseCode.trim()) {
+      setDialogError("Subject Code is required (e.g. CS-101 or PHY-11).");
+      return;
+    }
+    if (!form.courseName.trim()) {
+      setDialogError("Subject Name is required (e.g. Programming Fundamentals).");
+      return;
+    }
+    if (!form.department) {
+      setDialogError("Please select a Department or Discipline.");
+      return;
+    }
+
     setSaving(true);
     try {
+      const targetDept = form.department;
+      const targetSem = Number(form.semester) || 1;
+      const targetSet = form.subjectSet || "Set 1";
+      const normalizedCode = form.courseCode.trim().toUpperCase();
+      const normalizedName = form.courseName.trim();
+
       if (editingCourse) {
         const { data: updated } = await api.patch<CourseWithDetails>(
           `/api/courses/${editingCourse.id}`,
           {
             ...form,
+            courseCode: normalizedCode,
+            courseName: normalizedName,
+            creditHours: Number(form.creditHours) || 3,
+            totalMarks: Number(form.totalMarks) || 100,
             programLevel,
             ...(programLevel === "INTERMEDIATE"
-              ? { discipline: form.department, part: form.semester, subjectSet: form.subjectSet, totalMarks: form.totalMarks }
-              : { department: form.department, semester: form.semester, totalMarks: form.totalMarks }),
+              ? { discipline: targetDept, department: targetDept, part: targetSem, semester: targetSem, subjectSet: targetSet }
+              : { department: targetDept, semester: targetSem }),
           },
         );
         setCourses((prev) =>
           prev.map((c) => (c.id === updated.id ? updated : c)),
         );
+        setSelectedDept(targetDept);
+        setSelectedSem(targetSem);
+        if (programLevel === "INTERMEDIATE") {
+          setSelectedSet("all");
+        }
+        setSuccessBanner(`Subject "${updated.courseName}" (${updated.courseCode}) was updated successfully.`);
       } else {
         const { data: created } = await api.post<CourseWithDetails>(
           "/api/courses",
           {
             ...form,
+            courseCode: normalizedCode,
+            courseName: normalizedName,
+            creditHours: Number(form.creditHours) || 3,
+            totalMarks: Number(form.totalMarks) || 100,
             programLevel,
             ...(programLevel === "INTERMEDIATE"
-              ? { discipline: form.department, part: form.semester, subjectSet: form.subjectSet, totalMarks: form.totalMarks }
-              : { department: form.department, semester: form.semester, totalMarks: form.totalMarks }),
+              ? { discipline: targetDept, department: targetDept, part: targetSem, semester: targetSem, subjectSet: targetSet }
+              : { department: targetDept, semester: targetSem }),
           },
         );
         setCourses((prev) => [created, ...prev]);
+
+        // Navigate active view to the newly created course's department & semester
+        setSelectedDept(targetDept);
+        setSelectedSem(targetSem);
+        if (programLevel === "INTERMEDIATE") {
+          setSelectedSet("all");
+        }
+
+        setSuccessBanner(
+          `Successfully added "${created.courseName}" (${created.courseCode}) to ${targetDept} - ${formatTermLabel(programLevel, targetSem)}!`
+        );
       }
+
       setDialogOpen(false);
+      handleRefresh();
       router.refresh();
-    } catch {
-      /* ignore */
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string; message?: string } } };
+      const msg =
+        axiosErr?.response?.data?.error ||
+        axiosErr?.response?.data?.message ||
+        "Failed to save subject. Please check inputs or ensure subject code is unique.";
+      setDialogError(msg);
     } finally {
       setSaving(false);
     }
@@ -864,15 +927,20 @@ export default function ManageCoursesPage() {
     const matchesDept =
       !selectedDept ||
       selectedDept === "all" ||
-      c.department.toLowerCase() === selectedDept.toLowerCase() ||
+      (c.department && c.department.toLowerCase() === selectedDept.toLowerCase()) ||
       (c.discipline && c.discipline.toLowerCase() === selectedDept.toLowerCase());
     const matchesSem =
       !selectedSem || Number(c.semester) === Number(selectedSem) || Number(c.part) === Number(selectedSem);
-    
+
     if (programLevel === "INTERMEDIATE") {
       const setConfig = getSubjectSetFilterConfig(selectedDept || "");
-      const activeSet = setConfig.hasMultipleSets ? (selectedSet || "Set 1") : "Set 1";
-      const matchesSet = c.subjectSet ? c.subjectSet.toLowerCase() === activeSet.toLowerCase() : activeSet.toLowerCase() === "set 1";
+      const activeSet = setConfig.hasMultipleSets ? (selectedSet || "all") : "all";
+      if (!activeSet || activeSet === "all") return matchesDept && matchesSem;
+      const matchesSet =
+        !c.subjectSet ||
+        c.subjectSet.toLowerCase() === "compulsory" ||
+        c.subjectSet.toLowerCase() === "all" ||
+        c.subjectSet.toLowerCase() === activeSet.toLowerCase();
       return matchesDept && matchesSem && matchesSet;
     }
     return matchesDept && matchesSem;
@@ -900,6 +968,23 @@ export default function ManageCoursesPage() {
       transition={{ duration: 0.4 }}
       className="space-y-6"
     >
+      {/* Success Notification Banner */}
+      {successBanner && (
+        <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-sm font-medium flex items-center justify-between shadow-sm animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span>{successBanner}</span>
+          </div>
+          <button
+            onClick={() => setSuccessBanner(null)}
+            className="text-emerald-700 dark:text-emerald-300 hover:opacity-75 transition-opacity p-1 cursor-pointer"
+            title="Dismiss"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       <AnimatePresence mode="wait">
         {/* VIEW 1: DEPARTMENT SELECTOR */}
         {selectedDept === null && (
@@ -913,18 +998,40 @@ export default function ManageCoursesPage() {
           >
             <PageHeader
               title="Manage Courses"
-              subtitle="Select a department to manage semesters and subjects."
+              subtitle={programLevel === "INTERMEDIATE" ? "Select a discipline to manage parts and subjects." : "Select a department to manage semesters and subjects."}
               breadcrumbs={[
                 { label: "Dashboard", href: "/dashboard" },
                 { label: "Manage Courses" },
               ]}
+              action={
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRefresh}
+                    className="flex items-center gap-2 border-2 border-border bg-card px-3 py-1.5 shadow-[2px_2px_0px_0px_var(--border)] cursor-pointer hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[3px_3px_0px_0px_var(--border)] active:translate-x-0 active:translate-y-0 active:shadow-[1px_1px_0px_0px_var(--border)] transition-all"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    Refresh
+                  </Button>
+                  <Button
+                    onClick={openAdd}
+                    className="bg-brand-primary hover:bg-brand-primary/90 text-white h-9 px-4 rounded-xl flex items-center gap-2 cursor-pointer shadow-sm"
+                  >
+                    <Plus className="h-4 w-4" /> Add Subject
+                  </Button>
+                </div>
+              }
             />
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {getDisciplinesForLevel(programLevel).map((dept) => {
                 const meta = departmentMeta[dept] || defaultMeta;
                 const Icon = meta.icon;
-                const deptCount = courses.filter((c) => c.department === dept).length;
+                const deptCount = courses.filter((c) =>
+                  (c.department && c.department.toLowerCase() === dept.toLowerCase()) ||
+                  (c.discipline && c.discipline.toLowerCase() === dept.toLowerCase())
+                ).length;
 
                 return (
                   <Card
@@ -976,21 +1083,33 @@ export default function ManageCoursesPage() {
                 { label: selectedDept },
               ]}
               action={
-                <Button
-                  variant="outline"
-                  onClick={() => setSelectedDept(null)}
-                  className="gap-2 border-border hover:bg-accent hover:text-accent-foreground"
-                >
-                  <ArrowLeft className="h-4 w-4" /> {programLevel === "INTERMEDIATE" ? "Back to Disciplines" : "Back to Departments"}
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setSelectedDept(null)}
+                    className="gap-2 border-border hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                  >
+                    <ArrowLeft className="h-4 w-4" /> {programLevel === "INTERMEDIATE" ? "Back to Disciplines" : "Back to Departments"}
+                  </Button>
+                  <Button
+                    onClick={openAdd}
+                    className="bg-brand-primary hover:bg-brand-primary/90 text-white h-9 px-4 rounded-xl flex items-center gap-2 cursor-pointer shadow-sm"
+                  >
+                    <Plus className="h-4 w-4" /> Add Subject
+                  </Button>
+                </div>
               }
             />
 
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
               {getTermOptionsForLevel(programLevel).map((sem) => {
-                const semCount = courses.filter(
-                  (c) => c.department === selectedDept && c.semester === sem
-                ).length;
+                const semCount = courses.filter((c) => {
+                  const matchesDept =
+                    (c.department && c.department.toLowerCase() === selectedDept.toLowerCase()) ||
+                    (c.discipline && c.discipline.toLowerCase() === selectedDept.toLowerCase());
+                  const matchesSem = Number(c.semester) === Number(sem) || Number(c.part) === Number(sem);
+                  return matchesDept && matchesSem;
+                }).length;
 
                 return (
                   <Card
@@ -1128,11 +1247,12 @@ export default function ManageCoursesPage() {
                 {programLevel === "INTERMEDIATE" && getSubjectSetFilterConfig(selectedDept || "").hasMultipleSets && (
                   <div className="flex items-center gap-2">
                     <Label className="text-xs font-semibold text-muted-foreground uppercase">Subject Set:</Label>
-                    <Select value={selectedSet || "Set 1"} onValueChange={setSelectedSet}>
+                    <Select value={selectedSet || "all"} onValueChange={setSelectedSet}>
                       <SelectTrigger className="w-[140px] h-10 bg-card rounded-xl font-bold">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="all">All Sets</SelectItem>
                         {getSubjectSetFilterConfig(selectedDept || "").availableSets.map((set) => (
                           <SelectItem key={set} value={set}>
                             {set}
@@ -1167,6 +1287,14 @@ export default function ManageCoursesPage() {
                 : `Add a subject to ${formatTermLabel(programLevel, form.semester)} in ${form.department}.`}
             </DialogDescription>
           </DialogHeader>
+
+          {dialogError && (
+            <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-xs font-semibold flex items-center gap-2 animate-in fade-in">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>{dialogError}</span>
+            </div>
+          )}
+
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">

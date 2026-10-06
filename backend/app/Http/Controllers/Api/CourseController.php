@@ -110,7 +110,7 @@ class CourseController extends Controller
         $validated = $request->validate([
             'courseCode' => 'required|string',
             'courseName' => 'required|string',
-            'creditHours' => 'required|integer|min:1',
+            'creditHours' => 'nullable|integer|min:1',
             'totalMarks' => 'nullable|integer',
             'department' => 'required|string',
             'semester' => 'nullable|integer',
@@ -124,6 +124,11 @@ class CourseController extends Controller
             'shift' => 'nullable|string',
         ]);
 
+        $validated['courseCode'] = strtoupper(trim($validated['courseCode']));
+        $validated['courseName'] = trim($validated['courseName']);
+        $validated['department'] = trim($validated['department']);
+        $validated['creditHours'] = !empty($validated['creditHours']) ? (int) $validated['creditHours'] : 3;
+        $validated['totalMarks'] = !empty($validated['totalMarks']) ? (int) $validated['totalMarks'] : 100;
         $validated['semester'] = $validated['semester'] ?? 1;
         $validated['shift'] = $validated['shift'] ?? 'Morning';
 
@@ -136,8 +141,38 @@ class CourseController extends Controller
             }
         }
 
-        $course = Course::create($validated);
+        // Duplicate guard for courseCode in the department/discipline
+        $existing = Course::where('courseCode', $validated['courseCode'])
+            ->where(function ($q) use ($validated) {
+                $q->where('department', $validated['department']);
+                if (!empty($validated['discipline'])) {
+                    $q->orWhere('discipline', $validated['discipline']);
+                }
+            })
+            ->first();
 
+        if ($existing) {
+            return response()->json([
+                'error' => "Course code '{$validated['courseCode']}' already exists in {$validated['department']}."
+            ], 422);
+        }
+
+        try {
+            $course = Course::create($validated);
+        } catch (\Illuminate\Database\QueryException $e) {
+            if (str_contains($e->getMessage(), 'unique') || str_contains($e->getMessage(), '23505')) {
+                return response()->json([
+                    'error' => "Course code '{$validated['courseCode']}' already exists in {$validated['department']}."
+                ], 422);
+            }
+            throw $e;
+        }
+
+        $course->load([
+            'faculty.user:id,name',
+            'facultyMorning.user:id,name',
+            'facultyEvening.user:id,name',
+        ])->loadCount('enrollments');
 
         AuditLogService::log(
             'CREATED',
@@ -164,7 +199,7 @@ class CourseController extends Controller
         $validated = $request->validate([
             'courseCode' => 'sometimes|string',
             'courseName' => 'sometimes|string',
-            'creditHours' => 'sometimes|integer|min:1',
+            'creditHours' => 'nullable|integer|min:1',
             'totalMarks' => 'nullable|integer',
             'department' => 'sometimes|string',
             'semester' => 'sometimes|integer',
@@ -178,7 +213,41 @@ class CourseController extends Controller
             'shift' => 'sometimes|string',
         ]);
 
-        $course->update($validated);
+        if (isset($validated['courseCode'])) {
+            $validated['courseCode'] = strtoupper(trim($validated['courseCode']));
+        }
+        if (isset($validated['courseName'])) {
+            $validated['courseName'] = trim($validated['courseName']);
+        }
+        if (isset($validated['department'])) {
+            $validated['department'] = trim($validated['department']);
+        }
+
+        if (($validated['programLevel'] ?? $course->programLevel) === 'INTERMEDIATE') {
+            if (isset($validated['department']) && empty($validated['discipline'])) {
+                $validated['discipline'] = $validated['department'];
+            }
+            if (isset($validated['semester']) && empty($validated['part'])) {
+                $validated['part'] = $validated['semester'];
+            }
+        }
+
+        try {
+            $course->update($validated);
+        } catch (\Illuminate\Database\QueryException $e) {
+            if (str_contains($e->getMessage(), 'unique') || str_contains($e->getMessage(), '23505')) {
+                return response()->json([
+                    'error' => "Course code already exists in this department."
+                ], 422);
+            }
+            throw $e;
+        }
+
+        $course->load([
+            'faculty.user:id,name',
+            'facultyMorning.user:id,name',
+            'facultyEvening.user:id,name',
+        ])->loadCount('enrollments');
 
         AuditLogService::log(
             'UPDATED',
