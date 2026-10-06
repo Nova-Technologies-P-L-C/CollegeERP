@@ -122,6 +122,7 @@ class CourseController extends Controller
             'assignedFacultyMorning' => 'nullable|string',
             'assignedFacultyEvening' => 'nullable|string',
             'shift' => 'nullable|string',
+            'courseType' => 'nullable|string|in:COMPULSORY,ELECTIVE,LAB',
         ]);
 
         $validated['courseCode'] = strtoupper(trim($validated['courseCode']));
@@ -131,6 +132,7 @@ class CourseController extends Controller
         $validated['totalMarks'] = !empty($validated['totalMarks']) ? (int) $validated['totalMarks'] : 100;
         $validated['semester'] = $validated['semester'] ?? 1;
         $validated['shift'] = $validated['shift'] ?? 'Morning';
+        $validated['courseType'] = !empty($validated['courseType']) ? strtoupper($validated['courseType']) : 'COMPULSORY';
 
         if (($validated['programLevel'] ?? 'BS') === 'INTERMEDIATE') {
             if (empty($validated['discipline'])) {
@@ -211,8 +213,12 @@ class CourseController extends Controller
             'assignedFacultyMorning' => 'nullable|string',
             'assignedFacultyEvening' => 'nullable|string',
             'shift' => 'sometimes|string',
+            'courseType' => 'sometimes|nullable|string|in:COMPULSORY,ELECTIVE,LAB',
         ]);
 
+        if (isset($validated['courseType'])) {
+            $validated['courseType'] = strtoupper($validated['courseType']);
+        }
         if (isset($validated['courseCode'])) {
             $validated['courseCode'] = strtoupper(trim($validated['courseCode']));
         }

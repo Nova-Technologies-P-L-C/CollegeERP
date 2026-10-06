@@ -31,6 +31,7 @@ class CourseTest extends TestCase
                 $table->string('assignedFaculty')->nullable();
                 $table->string('assignedFacultyMorning')->nullable();
                 $table->string('assignedFacultyEvening')->nullable();
+                $table->string('courseType')->default('COMPULSORY');
                 $table->timestamp('createdAt')->nullable();
                 $table->timestamp('updatedAt')->nullable();
             });
@@ -54,6 +55,39 @@ class CourseTest extends TestCase
                 $table->string('id')->primary();
                 $table->string('courseId');
                 $table->string('studentId');
+                $table->timestamp('createdAt')->nullable();
+                $table->timestamp('updatedAt')->nullable();
+            });
+        }
+        if (!Schema::hasTable('Faculty')) {
+            Schema::create('Faculty', function ($table) {
+                $table->string('id')->primary();
+                $table->string('userId');
+                $table->string('phone')->nullable();
+                $table->string('department');
+                $table->string('specialization');
+                $table->timestamp('joinDate')->nullable();
+                $table->string('avatar')->nullable();
+            });
+        }
+        if (!Schema::hasTable('Timetable')) {
+            Schema::create('Timetable', function ($table) {
+                $table->string('id')->primary();
+                $table->string('courseId');
+                $table->string('room');
+                $table->string('day');
+                $table->string('startTime');
+                $table->string('endTime');
+                $table->string('shift')->default('Morning');
+            });
+        }
+        if (!Schema::hasTable('User')) {
+            Schema::create('User', function ($table) {
+                $table->string('id')->primary();
+                $table->string('name')->nullable();
+                $table->string('email')->unique();
+                $table->string('role')->default('STUDENT');
+                $table->string('avatar')->nullable();
                 $table->timestamp('createdAt')->nullable();
                 $table->timestamp('updatedAt')->nullable();
             });
@@ -199,5 +233,100 @@ class CourseTest extends TestCase
         $res2->assertJsonFragment(['deletedCount' => 1]);
         $this->assertDatabaseMissing('Course', ['id' => 'c3']);
         $this->assertDatabaseHas('Course', ['id' => 'c1']);
+    }
+
+    public function test_can_create_course_with_type_and_defaults(): void
+    {
+        $admin = $this->createAdminUser();
+
+        // 1. Default COMPULSORY
+        $res1 = $this->actingAs($admin)->postJson('/api/courses', [
+            'courseCode' => 'ENG-101',
+            'courseName' => 'Functional English',
+            'creditHours' => 3,
+            'department' => 'English',
+            'semester' => 1,
+            'programLevel' => 'BS',
+        ]);
+        $res1->assertStatus(201);
+        $res1->assertJsonFragment(['courseType' => 'COMPULSORY']);
+
+        // 2. Explicit LAB
+        $res2 = $this->actingAs($admin)->postJson('/api/courses', [
+            'courseCode' => 'CS-101L',
+            'courseName' => 'Programming Lab',
+            'creditHours' => 1,
+            'department' => 'Computer Science',
+            'semester' => 1,
+            'courseType' => 'LAB',
+            'programLevel' => 'BS',
+        ]);
+        $res2->assertStatus(201);
+        $res2->assertJsonFragment(['courseType' => 'LAB']);
+    }
+
+    public function test_faculty_workload_and_timetable_conflicts(): void
+    {
+        $admin = $this->createAdminUser();
+
+        $teacherUser = new User([
+            'id' => 'u-fac-1',
+            'name' => 'Prof. Alan Turing',
+            'email' => 'turing@college.test',
+            'role' => 'FACULTY',
+        ]);
+        $teacherUser->save();
+
+        $faculty = new \App\Models\Faculty([
+            'id' => 'f-1',
+            'userId' => 'u-fac-1',
+            'department' => 'Computer Science',
+            'specialization' => 'Algorithms',
+        ]);
+        $faculty->save();
+
+        // Assign two courses (3 CH + 4 CH = 7 CH)
+        Course::create([
+            'id' => 'c-wl-1',
+            'courseCode' => 'CS-111',
+            'courseName' => 'CS 1',
+            'creditHours' => 3,
+            'department' => 'Computer Science',
+            'semester' => 1,
+            'assignedFaculty' => 'f-1',
+        ]);
+        Course::create([
+            'id' => 'c-wl-2',
+            'courseCode' => 'CS-222',
+            'courseName' => 'CS 2',
+            'creditHours' => 4,
+            'department' => 'Computer Science',
+            'semester' => 2,
+            'assignedFacultyMorning' => 'f-1',
+        ]);
+
+        // Add a timetable entry
+        \App\Models\Timetable::create([
+            'id' => 'tt-1',
+            'courseId' => 'c-wl-1',
+            'room' => 'Lab 1',
+            'day' => 'Monday',
+            'startTime' => '08:30',
+            'endTime' => '09:15',
+            'shift' => 'Morning',
+        ]);
+
+        $res = $this->actingAs($admin)->getJson('/api/faculty');
+        $res->assertStatus(200);
+
+        $data = $res->json();
+        $target = collect($data)->firstWhere('id', 'f-1');
+
+        $this->assertNotNull($target);
+        $this->assertEquals(7, $target['workload']['totalCreditHours']);
+        $this->assertEquals(2, $target['workload']['totalCourses']);
+        $this->assertEquals('NORMAL', $target['workload']['status']);
+        $this->assertFalse($target['workload']['isOverloaded']);
+        $this->assertEquals(1, $target['timetableSlotsCount']);
     }
 }

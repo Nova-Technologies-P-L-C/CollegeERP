@@ -7,32 +7,102 @@ use Illuminate\Http\Request;
 use App\Models\Faculty;
 use App\Models\FacultyAttendance;
 use App\Models\User;
+use App\Models\Timetable;
 use App\Services\AuditLogService;
 use Carbon\Carbon;
 
 class FacultyController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         $faculty = Faculty::with([
             'user:id,name,email,avatar',
-            'teaches:id,courseCode,courseName,department,assignedFaculty',
+            'teaches:id,courseCode,courseName,department,assignedFaculty,creditHours,shift,programLevel',
+            'teachesMorning:id,courseCode,courseName,department,assignedFacultyMorning,creditHours,shift,programLevel',
+            'teachesEvening:id,courseCode,courseName,department,assignedFacultyEvening,creditHours,shift,programLevel',
         ])->get();
 
-        $result = $faculty->map(function ($f) {
+        $allTimetables = Timetable::with('course:id,courseCode,courseName,assignedFaculty,assignedFacultyMorning,assignedFacultyEvening')
+            ->get();
+
+        $result = $faculty->map(function ($f) use ($allTimetables) {
+            $coursesMap = [];
+            $totalCreditHours = 0;
+
+            if ($f->teaches) {
+                foreach ($f->teaches as $c) {
+                    $coursesMap[$c->id] = $c;
+                }
+            }
+            if ($f->teachesMorning) {
+                foreach ($f->teachesMorning as $c) {
+                    $coursesMap[$c->id] = $c;
+                }
+            }
+            if ($f->teachesEvening) {
+                foreach ($f->teachesEvening as $c) {
+                    $coursesMap[$c->id] = $c;
+                }
+            }
+
+            foreach ($coursesMap as $c) {
+                $totalCreditHours += (int) ($c->creditHours ?: 3);
+            }
+
+            $maxCreditHours = 18;
+            $status = 'NORMAL';
+            if ($totalCreditHours > $maxCreditHours) {
+                $status = 'OVERLOAD';
+            } elseif ($totalCreditHours >= 15) {
+                $status = 'HEAVY';
+            } elseif ($totalCreditHours < 6) {
+                $status = 'LIGHT';
+            }
+
+            $fId = $f->id;
+            $mySlots = $allTimetables->filter(function ($tt) use ($fId) {
+                $course = $tt->course;
+                if (!$course) return false;
+                if ($tt->shift === 'Evening') {
+                    return ($course->assignedFacultyEvening ?: $course->assignedFaculty) === $fId;
+                }
+                return ($course->assignedFacultyMorning ?: $course->assignedFaculty) === $fId;
+            })->map(function ($tt) {
+                return [
+                    'id' => $tt->id,
+                    'day' => $tt->day,
+                    'startTime' => $tt->startTime,
+                    'endTime' => $tt->endTime,
+                    'room' => $tt->room,
+                    'shift' => $tt->shift,
+                    'courseCode' => $tt->course->courseCode ?? '',
+                    'courseName' => $tt->course->courseName ?? '',
+                ];
+            })->values();
+
             return [
                 'id' => $f->id,
                 'userId' => $f->userId,
                 'user' => [
                     'name' => $f->user->name ?? null,
                     'email' => $f->user->email ?? null,
+                    'avatar' => $f->user->avatar ?? null,
                 ],
                 'phone' => $f->phone,
                 'department' => $f->department,
                 'specialization' => $f->specialization,
                 'joinDate' => $f->joinDate ? $f->joinDate->toIso8601String() : null,
                 'avatar' => $f->avatar,
-                'teaches' => $f->teaches,
+                'teaches' => array_values($coursesMap),
+                'workload' => [
+                    'totalCourses' => count($coursesMap),
+                    'totalCreditHours' => $totalCreditHours,
+                    'maxCreditHours' => $maxCreditHours,
+                    'status' => $status,
+                    'isOverloaded' => $totalCreditHours > $maxCreditHours,
+                ],
+                'timetableSlotsCount' => $mySlots->count(),
+                'timetableSchedule' => $mySlots,
             ];
         });
 

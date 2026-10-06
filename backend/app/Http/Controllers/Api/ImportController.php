@@ -25,6 +25,7 @@ class ImportController extends Controller
             'courses.*.discipline' => 'nullable|string',
             'courses.*.part' => 'nullable|integer',
             'courses.*.subjectSet' => 'nullable|string',
+            'courses.*.courseType' => 'nullable|string',
         ]);
 
         $created = 0;
@@ -32,11 +33,13 @@ class ImportController extends Controller
             $code = strtoupper(trim($c['courseCode']));
             $dept = trim($c['department']);
             $level = $c['programLevel'] ?? 'BS';
+            $type = strtoupper(trim($c['courseType'] ?? 'COMPULSORY'));
 
             $c['courseCode'] = $code;
             $c['department'] = $dept;
             $c['creditHours'] = !empty($c['creditHours']) ? (int) $c['creditHours'] : 3;
             $c['programLevel'] = $level;
+            $c['courseType'] = in_array($type, ['ELECTIVE', 'LAB']) ? $type : 'COMPULSORY';
 
             if ($level === 'INTERMEDIATE') {
                 if (empty($c['discipline'])) {

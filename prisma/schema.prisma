@@ -110,6 +110,7 @@ model Course {
   discipline             String?
   part                   Int?
   subjectSet             String?
+  courseType             String       @default("COMPULSORY")
   assignedFaculty        String?
   assignedFacultyMorning String?
   assignedFacultyEvening String?

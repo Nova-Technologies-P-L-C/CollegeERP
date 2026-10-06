@@ -85,6 +85,7 @@ interface CourseWithDetails {
   discipline?: string | null;
   part?: number | null;
   subjectSet?: string | null;
+  courseType?: "COMPULSORY" | "ELECTIVE" | "LAB" | string;
   assignedFaculty: string | null;
   assignedFacultyMorning?: string | null;
   assignedFacultyEvening?: string | null;
@@ -98,8 +99,27 @@ interface CourseWithDetails {
 
 interface FacultyOption {
   id: string;
-  user: { name: string | null };
+  user: { name: string | null; email?: string | null };
   department: string;
+  specialization?: string;
+  workload?: {
+    totalCourses: number;
+    totalCreditHours: number;
+    maxCreditHours: number;
+    status: "NORMAL" | "HEAVY" | "OVERLOAD" | "LIGHT";
+    isOverloaded: boolean;
+  };
+  timetableSlotsCount?: number;
+  timetableSchedule?: Array<{
+    id: string;
+    day: string;
+    startTime: string;
+    endTime: string;
+    room: string;
+    shift: string;
+    courseCode: string;
+    courseName: string;
+  }>;
 }
 
 interface CourseForm {
@@ -110,6 +130,7 @@ interface CourseForm {
   department: string;
   semester: number;
   subjectSet: string;
+  courseType: "COMPULSORY" | "ELECTIVE" | "LAB";
 }
 
 interface AuditLogEntry {
@@ -131,6 +152,7 @@ const emptyCourse: CourseForm = {
   department: "",
   semester: 1,
   subjectSet: "Set 1",
+  courseType: "COMPULSORY",
 };
 
 const departmentMeta: Record<string, { icon: typeof Laptop; color: string; bg: string; border: string }> = {
@@ -301,6 +323,7 @@ export default function ManageCoursesPage() {
     department: string;
     semester: number;
     shift: string;
+    courseType: string;
     status: "valid" | "missing" | "invalid_credits" | "invalid_sem" | "invalid_dept" | "duplicate";
     reason?: string;
   }>>([]);
@@ -358,16 +381,17 @@ export default function ManageCoursesPage() {
   const handleDownloadTemplate = () => {
     const csvContent =
       programLevel === "INTERMEDIATE"
-        ? "courseCode,courseName,creditHours,department,semester,shift\n" +
-          "PHY-11,Physics,3,F.Sc Pre-Engineering,1,Morning\n" +
-          "CHM-11,Chemistry,3,F.Sc Pre-Engineering,1,Morning\n" +
-          "CS-11,Computer Science,3,ICS,1,Morning\n" +
-          "ENG-11,English,3,F.Sc Pre-Engineering,1,Morning\n"
-        : "courseCode,courseName,creditHours,department,semester,shift\n" +
-          "CS-301,Database Systems,3,Computer Science,3,Morning\n" +
-          "CS-302,Data Structures & Algorithms,4,Computer Science,3,Morning\n" +
-          "MTH-101,Calculus & Analytical Geometry,3,Mathematics,1,Morning\n" +
-          "PHY-201,Applied Physics,3,Physics,2,Morning\n";
+        ? "courseCode,courseName,creditHours,department,semester,shift,courseType\n" +
+          "PHY-11,Physics,3,F.Sc Pre-Engineering,1,Morning,COMPULSORY\n" +
+          "CHM-11,Chemistry,3,F.Sc Pre-Engineering,1,Morning,COMPULSORY\n" +
+          "CS-11,Computer Science,3,ICS,1,Morning,ELECTIVE\n" +
+          "ENG-11,English,3,F.Sc Pre-Engineering,1,Morning,COMPULSORY\n"
+        : "courseCode,courseName,creditHours,department,semester,shift,courseType\n" +
+          "CS-301,Database Systems,3,Computer Science,3,Morning,COMPULSORY\n" +
+          "CS-302,Data Structures & Algorithms,4,Computer Science,3,Morning,COMPULSORY\n" +
+          "CS-303,Data Structures Lab,1,Computer Science,3,Morning,LAB\n" +
+          "MTH-101,Calculus & Analytical Geometry,3,Mathematics,1,Morning,COMPULSORY\n" +
+          "PHY-201,Applied Physics,3,Physics,2,Morning,COMPULSORY\n";
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -416,6 +440,8 @@ export default function ManageCoursesPage() {
       const dept = get("department");
       const sem = Number(get("semester"));
       const shift = get("shift") || "Morning";
+      const typeRaw = (get("coursetype") || get("type") || "COMPULSORY").toUpperCase();
+      const courseType = ["ELECTIVE", "LAB"].includes(typeRaw) ? typeRaw : "COMPULSORY";
       const codeUpper = code.toUpperCase();
       const pairKey = `${codeUpper}|${dept.toLowerCase()}`;
 
@@ -451,6 +477,7 @@ export default function ManageCoursesPage() {
         department: dept,
         semester: sem,
         shift,
+        courseType,
         status,
         reason,
       });
@@ -480,6 +507,7 @@ export default function ManageCoursesPage() {
         department: r.department,
         semester: r.semester,
         shift: r.shift,
+        courseType: r.courseType || "COMPULSORY",
         programLevel,
         ...(programLevel === "INTERMEDIATE" ? { discipline: r.department, part: r.semester } : {}),
       }));
@@ -615,6 +643,7 @@ export default function ManageCoursesPage() {
       department: selectedDept || (programLevel === "INTERMEDIATE" ? "F.Sc Pre-Engineering" : "Computer Science"),
       semester: selectedSem || 1,
       subjectSet: selectedSet && selectedSet !== "all" ? selectedSet : "Set 1",
+      courseType: "COMPULSORY",
     });
     setDialogOpen(true);
   };
@@ -630,6 +659,7 @@ export default function ManageCoursesPage() {
       department: c.department || c.discipline || "Computer Science",
       semester: c.semester || c.part || 1,
       subjectSet: c.subjectSet || "Set 1",
+      courseType: (c.courseType as "COMPULSORY" | "ELECTIVE" | "LAB") || "COMPULSORY",
     });
     setDialogOpen(true);
   };
@@ -875,16 +905,34 @@ export default function ManageCoursesPage() {
       key: "courseName",
       header: "Course Name",
       sortable: true,
-      render: (row) => (
-        <div className="flex items-center gap-2">
-          <span className="font-semibold text-foreground">{row.courseName}</span>
-          {programLevel === "INTERMEDIATE" && row.subjectSet && (
-            <Badge variant="outline" className="text-[10px] bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20 font-bold">
-              {row.subjectSet}
+      render: (row) => {
+        const typeBadge =
+          row.courseType === "ELECTIVE" ? (
+            <Badge variant="outline" className="text-[10px] py-0 px-1.5 h-4 bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30 font-medium">
+              Elective
             </Badge>
-          )}
-        </div>
-      ),
+          ) : row.courseType === "LAB" ? (
+            <Badge variant="outline" className="text-[10px] py-0 px-1.5 h-4 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 font-medium">
+              Lab
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="text-[10px] py-0 px-1.5 h-4 bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 font-medium">
+              Compulsory
+            </Badge>
+          );
+
+        return (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-semibold text-foreground">{row.courseName}</span>
+            {typeBadge}
+            {programLevel === "INTERMEDIATE" && row.subjectSet && (
+              <Badge variant="outline" className="text-[10px] py-0 px-1.5 h-4 bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20 font-bold">
+                {row.subjectSet}
+              </Badge>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: "creditHours",
@@ -917,6 +965,14 @@ export default function ManageCoursesPage() {
         const isAssigned = Boolean(morningTeacher);
         const morningKey = `${row.id}-Morning`;
         const isUnassigningThis = unassigningShiftKey === morningKey;
+
+        const morningFacId =
+          row.assignedFacultyMorning ||
+          (row.assignedFaculty && (row.shift === "Morning" || row.shift === "Both")
+            ? row.assignedFaculty
+            : null);
+        const morningFacObj = morningFacId ? facultyList.find((f) => f.id === morningFacId) : null;
+        const isMorningOverloaded = morningFacObj?.workload?.isOverloaded;
 
         return (
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -953,6 +1009,15 @@ export default function ManageCoursesPage() {
               </button>
             )}
 
+            {isAssigned && isMorningOverloaded && (
+              <span
+                className="text-[10px] font-bold text-rose-600 dark:text-rose-400 bg-rose-500/10 px-1.5 py-0.5 rounded-md border border-rose-500/30"
+                title={`Teaching workload overloaded: ${morningFacObj?.workload?.totalCreditHours} CH (recommended limit: 18 CH)`}
+              >
+                ⚠ Overload ({morningFacObj?.workload?.totalCreditHours} CH)
+              </span>
+            )}
+
             {morningDept && morningDept !== row.department && (
               <span className="text-[10px] font-bold text-purple-600 dark:text-purple-400 bg-purple-500/10 px-1.5 py-0.5 rounded-md border border-purple-500/20">
                 {morningDept}
@@ -981,6 +1046,14 @@ export default function ManageCoursesPage() {
         const isAssigned = Boolean(eveningTeacher);
         const eveningKey = `${row.id}-Evening`;
         const isUnassigningThis = unassigningShiftKey === eveningKey;
+
+        const eveningFacId =
+          row.assignedFacultyEvening ||
+          (row.assignedFaculty && (row.shift === "Evening" || row.shift === "Both")
+            ? row.assignedFaculty
+            : null);
+        const eveningFacObj = eveningFacId ? facultyList.find((f) => f.id === eveningFacId) : null;
+        const isEveningOverloaded = eveningFacObj?.workload?.isOverloaded;
 
         return (
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -1015,6 +1088,15 @@ export default function ManageCoursesPage() {
                   <UserMinus className="h-3.5 w-3.5" />
                 )}
               </button>
+            )}
+
+            {isAssigned && isEveningOverloaded && (
+              <span
+                className="text-[10px] font-bold text-rose-600 dark:text-rose-400 bg-rose-500/10 px-1.5 py-0.5 rounded-md border border-rose-500/30"
+                title={`Teaching workload overloaded: ${eveningFacObj?.workload?.totalCreditHours} CH (recommended limit: 18 CH)`}
+              >
+                ⚠ Overload ({eveningFacObj?.workload?.totalCreditHours} CH)
+              </span>
             )}
 
             {eveningDept && eveningDept !== row.department && (
@@ -1554,6 +1636,24 @@ export default function ManageCoursesPage() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="courseType">Course Type</Label>
+                <Select
+                  value={form.courseType || "COMPULSORY"}
+                  onValueChange={(v) =>
+                    setForm({ ...form, courseType: v as "COMPULSORY" | "ELECTIVE" | "LAB" })
+                  }
+                >
+                  <SelectTrigger id="courseType">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="COMPULSORY">Compulsory Subject</SelectItem>
+                    <SelectItem value="ELECTIVE">Elective Subject</SelectItem>
+                    <SelectItem value="LAB">Lab / Practical Course</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               {programLevel === "INTERMEDIATE" && (
                 <div className="space-y-2">
                   <Label htmlFor="subjectSet">Subject Set</Label>
@@ -1593,7 +1693,7 @@ export default function ManageCoursesPage() {
 
       {/* Assign Faculty Dialog */}
       <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
-        <DialogContent className="sm:max-w-[400px]">
+        <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>
             <DialogTitle>Assign Faculty</DialogTitle>
             <DialogDescription>
@@ -1620,7 +1720,22 @@ export default function ManageCoursesPage() {
                       return (
                         <SelectItem key={f.id} value={f.id}>
                           <div className="flex items-center justify-between gap-3 w-full">
-                            <span className="font-medium">{f.user.name ?? "—"}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{f.user.name ?? "—"}</span>
+                              {f.workload && (
+                                <span
+                                  className={`text-[10px] font-mono px-1.5 py-0.2 rounded font-semibold ${
+                                    f.workload.isOverloaded
+                                      ? "bg-rose-500/15 text-rose-600 dark:text-rose-400"
+                                      : f.workload.status === "HEAVY"
+                                      ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                                      : "bg-muted text-muted-foreground"
+                                  }`}
+                                >
+                                  {f.workload.totalCreditHours} CH
+                                </span>
+                              )}
+                            </div>
                             <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded font-mono ${isCrossDept
                                 ? "bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-500/30"
                                 : "bg-brand-primary/10 text-brand-primary border border-brand-primary/20"
@@ -1649,6 +1764,100 @@ export default function ManageCoursesPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            {selectedFaculty && selectedFaculty !== "none" && (() => {
+              const fac = facultyList.find((f) => f.id === selectedFaculty);
+              if (!fac) return null;
+              const currentCH = fac.workload?.totalCreditHours ?? 0;
+              const addedCH = assigningCourse?.creditHours ?? 3;
+              const newCH = currentCH + addedCH;
+              const maxCH = fac.workload?.maxCreditHours ?? 18;
+              const isOver = newCH > maxCH;
+              const isHeavy = newCH >= 15 && !isOver;
+
+              const shiftSlots = (fac.timetableSchedule || []).filter((s) =>
+                selectedAssignShift === "Both" ? true : s.shift === selectedAssignShift
+              );
+
+              return (
+                <div className="space-y-3 pt-1">
+                  {/* Workload Capacity Meter */}
+                  <div className={`p-3 rounded-2xl border text-xs space-y-2 transition-all ${
+                    isOver
+                      ? "bg-rose-500/10 border-rose-500/30 text-rose-900 dark:text-rose-200"
+                      : isHeavy
+                      ? "bg-amber-500/10 border-amber-500/30 text-amber-900 dark:text-amber-200"
+                      : "bg-muted/40 border-border text-foreground"
+                  }`}>
+                    <div className="flex items-center justify-between font-semibold">
+                      <span>Teaching Workload:</span>
+                      <span className="font-mono">
+                        {currentCH} + {addedCH} = <strong>{newCH}</strong> / {maxCH} CH
+                      </span>
+                    </div>
+
+                    <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+                      <div
+                        className={`h-full transition-all duration-300 rounded-full ${
+                          isOver ? "bg-rose-500" : isHeavy ? "bg-amber-500" : "bg-emerald-500"
+                        }`}
+                        style={{ width: `${Math.min(100, (newCH / maxCH) * 100)}%` }}
+                      />
+                    </div>
+
+                    {isOver && (
+                      <div className="flex items-start gap-1.5 text-[11px] text-rose-600 dark:text-rose-400 font-medium pt-0.5">
+                        <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                        <span>
+                          <strong>Overload Alert:</strong> Assigning this course brings {fac.user.name ?? "instructor"} to {newCH} CH (exceeds recommended {maxCH} CH/week limit).
+                        </span>
+                      </div>
+                    )}
+                    {isHeavy && (
+                      <div className="flex items-center gap-1.5 text-[11px] text-amber-600 dark:text-amber-400 font-medium pt-0.5">
+                        <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                        <span>Heavy teaching load ({newCH} / {maxCH} CH). Approaching weekly limit.</span>
+                      </div>
+                    )}
+                    {!isOver && !isHeavy && (
+                      <div className="flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium pt-0.5">
+                        <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                        <span>Teaching workload within normal capacity ({newCH} / {maxCH} CH).</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Active Timetable Slots / Conflict Preview */}
+                  <div className="p-3 rounded-2xl border border-border bg-card/60 text-xs space-y-2">
+                    <div className="flex items-center justify-between font-semibold text-muted-foreground text-[11px]">
+                      <span>Active Scheduled Lectures ({shiftSlots.length}):</span>
+                      <span className="font-mono text-[10px] uppercase">{selectedAssignShift}</span>
+                    </div>
+
+                    {shiftSlots.length > 0 ? (
+                      <div className="max-h-24 overflow-y-auto space-y-1 pr-1 font-mono text-[10px]">
+                        {shiftSlots.map((s) => (
+                          <div
+                            key={s.id}
+                            className="flex items-center justify-between p-1.5 rounded-lg bg-muted/40 border border-border/50"
+                          >
+                            <span>{s.day} ({s.startTime}–{s.endTime})</span>
+                            <span className="font-semibold text-brand-primary">
+                              {s.courseCode} • {s.room}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground py-0.5">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                        <span>No scheduled lecture conflicts in {selectedAssignShift} shift.</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
           <DialogFooter className="flex flex-wrap items-center justify-between gap-2">
             {(selectedAssignShift === "Morning"
@@ -1775,6 +1984,12 @@ export default function ManageCoursesPage() {
               <div className="mt-2">
                 <span className="text-xs text-muted-foreground block font-medium">Semester / Credits</span>
                 <span className="font-semibold text-sm text-foreground">Semester {viewingCourse?.semester} • {viewingCourse?.creditHours} CH</span>
+              </div>
+              <div className="mt-2">
+                <span className="text-xs text-muted-foreground block font-medium">Course Classification</span>
+                <span className="font-semibold text-sm text-foreground">
+                  {viewingCourse?.courseType === "ELECTIVE" ? "Elective Course" : viewingCourse?.courseType === "LAB" ? "Lab / Practical" : "Compulsory Course"}
+                </span>
               </div>
             </div>
 
@@ -1999,6 +2214,7 @@ export default function ManageCoursesPage() {
                         <th className="p-2.5 font-semibold">Row</th>
                         <th className="p-2.5 font-semibold">Code</th>
                         <th className="p-2.5 font-semibold">Subject Name</th>
+                        <th className="p-2.5 font-semibold">Type</th>
                         <th className="p-2.5 font-semibold">Department</th>
                         <th className="p-2.5 font-semibold">Sem</th>
                         <th className="p-2.5 font-semibold">Status</th>
@@ -2010,6 +2226,17 @@ export default function ManageCoursesPage() {
                           <td className="p-2.5 font-mono text-muted-foreground">{r.rowNum}</td>
                           <td className="p-2.5 font-mono font-semibold">{r.courseCode || "-"}</td>
                           <td className="p-2.5 font-medium">{r.courseName || "-"}</td>
+                          <td className="p-2.5">
+                            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                              r.courseType === "ELECTIVE"
+                                ? "bg-purple-500/10 text-purple-600 dark:text-purple-400"
+                                : r.courseType === "LAB"
+                                ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                                : "bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                            }`}>
+                              {r.courseType || "COMPULSORY"}
+                            </span>
+                          </td>
                           <td className="p-2.5 text-muted-foreground">{r.department || "-"}</td>
                           <td className="p-2.5 font-medium">{r.semester || "-"}</td>
                           <td className="p-2.5">
