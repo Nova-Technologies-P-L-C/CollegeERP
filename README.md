@@ -1,10 +1,10 @@
 <p align="center">
-	<img src="public/logo.svg" alt="Nova Technology ERP logo" width="220" />
+	<img src="frontend/public/logo.svg" alt="Nova Technology ERP logo" width="220" />
 </p>
 
 # Nova Technology — ERP Portal
 
-A full-stack, role-based college ERP built with Next.js App Router, Clerk, Prisma, and PostgreSQL. It centralizes attendance, grades, fees, timetable, quizzes, admissions, announcements, and public QR profile verification for Students, Faculty, and Admins.
+A full-stack, role-based college ERP built with Next.js App Router (frontend), Laravel 11 (backend), Clerk, Prisma/Eloquent, and PostgreSQL. It centralizes attendance, grades, fees, timetable, quizzes, admissions, announcements, and public QR profile verification for Students, Faculty, and Admins.
 
 This project is built and maintained by **Nova Technology**.
 
@@ -12,7 +12,7 @@ This project is built and maintained by **Nova Technology**.
 
 - Role-based dashboards and navigation for Student, Faculty, and Admin
 - Clerk-powered authentication with role checks in protected routes and APIs
-- PostgreSQL + Prisma data layer with strict relational models
+- PostgreSQL database shared between Next.js and Laravel Eloquent / Prisma
 - Attendance management with duplicate-day constraints
 - Grade workflows with lock support
 - Fee/dues visibility for students and administration
@@ -22,42 +22,42 @@ This project is built and maintained by **Nova Technology**.
 
 ## Tech Stack
 
-- Language: TypeScript
-- Framework: Next.js 16 (App Router)
-- UI: Tailwind CSS v4, ShadCN UI, Framer Motion
-- Auth: Clerk
-- ORM: Prisma
-- Database: PostgreSQL
-- Charts: Recharts (ShadCN chart patterns)
-- Runtime and package manager: Bun
-- Deployment target: Vercel
+- **Frontend:** Next.js 16 (App Router), React 19, Tailwind CSS v4, ShadCN UI, Framer Motion, Bun
+- **Backend:** Laravel 11 (PHP 8.3), Eloquent ORM, Composer
+- **Auth:** Clerk (JWT verification via JWKS)
+- **Database:** PostgreSQL (shared)
+- **Charts:** Recharts (ShadCN chart patterns)
 
 ## Project Structure
 
 ```text
 .
-├── prisma/
-│   ├── schema.prisma
-│   ├── seed.ts
-│   └── migrations/
-├── src/
+├── frontend/                  # Next.js App Router client application
+│   ├── prisma/                # Prisma schema, migrations, seeders
+│   ├── public/                # Static assets & logos
+│   ├── src/
+│   │   ├── app/               # Next.js pages and layouts
+│   │   ├── components/        # UI & Dashboard components
+│   │   ├── context/           # React context providers
+│   │   ├── hooks/             # Custom React hooks
+│   │   ├── lib/               # Utilities, axios client, constants
+│   │   └── types/             # TypeScript definitions
+│   ├── package.json
+│   ├── next.config.ts         # Proxies /api/* to Laravel backend (http://127.0.0.1:8000)
+│   └── tsconfig.json
+├── backend/                   # Laravel 11 REST API backend
 │   ├── app/
-│   │   ├── api/                   # Route handlers
-│   │   ├── dashboard/             # Protected app shell and role pages
-│   │   ├── verify/[userId]/       # Public QR verification page
-│   │   ├── sign-in/ sign-up/      # Auth entry pages
-│   │   ├── layout.tsx             # Root providers + metadata
-│   │   └── globals.css            # Tailwind v4 tokens/theme
-│   ├── components/
-│   │   ├── dashboard/
-│   │   └── ui/
-│   ├── lib/                       # Prisma singleton, constants, helpers
-│   ├── types/
-│   └── utils/
-├── docs/
-│   └── plans/
-├── check-db.ts
-├── AGENTS.md
+│   │   ├── Http/Controllers/ # REST API controllers
+│   │   ├── Middleware/       # ClerkAuth & Role middlewares
+│   │   ├── Models/           # Eloquent models
+│   │   └── Services/         # Clerk & core services
+│   ├── config/
+│   ├── database/             # Migrations & seeders
+│   ├── routes/api.php        # REST API endpoints
+│   ├── composer.json
+│   └── artisan
+├── docker-compose.yaml        # PostgreSQL database service
+├── AGENTS.md                  # Development instructions & guidelines
 └── README.md
 ```
 
